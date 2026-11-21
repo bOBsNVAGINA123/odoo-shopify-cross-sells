@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Odoo Shopify Cross Sells</title>
+<!-- Embedded Shopify admin page. Holds NO data: numbers come from the okb-stats function, which only answers
+     a valid Shopify session token for this app (client id below). -->
+<meta name="shopify-api-key" content="2062428c9eafbbf40a2b212ee890bb81">
+<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+<style>
+  :root{--ink:#303030;--muted:#616161;--line:#e3e3e3;--bg:#f1f1f1;--card:#fff;--blue:#426db3;--good:#0d7a3f;--bad:#b42318}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 10px}
+  select{font:inherit;padding:7px 10px;border:1px solid #c9cccf;border-radius:8px;background:#fff}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border-radius:12px;box-shadow:0 1px 0 rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.04);padding:16px}
+  .kpi b{display:block;font-size:24px;margin-top:4px}.kpi span{color:var(--muted);font-size:13px}.kpi small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left;white-space:normal}th{color:var(--muted);font-weight:600;font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  .note{color:var(--muted);font-size:12.5px;margin-top:8px}.msg{padding:40px;text-align:center;color:var(--muted)}
+  td.heat{border-radius:4px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Odoo Shopify Cross Sells</h1>
+    <label>Period <select id="days"><option value="7">Last 7 days</option><option value="14" selected>Last 14 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></label>
+  </header>
+  <div id="app"><div class="msg">Loading…</div></div>
+</main>
+<script>
+const FN = 'https://vnrxkekoqftknzjayxpx.supabase.co/functions/v1/okb-stats';
+const SRC = { pick: 'Product page picks', best: 'Best sellers tabs', drawer: 'Cart drawer', near: 'Sold out: closest match', qv: 'Pop-up' };
+const egp = (n) => 'EGP ' + Math.round(n || 0).toLocaleString('en-US');
+const num = (n) => Math.round(n || 0).toLocaleString('en-US');
+const pct = (a, b) => b ? (100 * a / b).toFixed(1) + '%' : '–';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pretty = (h) => esc(String(h).replace(/^[0-9a-z]*-?\d+-/i, '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
+function heat(v, max) { const a = max ? Math.min(1, v / max) : 0; return `style="background:rgba(66,109,179,${(a * 0.35).toFixed(2)})"`; }
+
+async function load() {
+  const app = document.getElementById('app'), days = document.getElementById('days').value;
+  app.innerHTML = '<div class="msg">Loading…</div>';
+  try {
+    const tok = await shopify.idToken();
+    const r = await fetch(`${FN}?days=${days}`, { headers: { Authorization: 'Bearer ' + tok } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error === 'not_configured' ? 'The app secret is not set on the server yet.' : (d.error || r.status));
+    render(d);
+  } catch (e) { app.innerHTML = `<div class="card msg">Could not load: ${esc(e.message || e)}</div>`; }
+}
+
+function render(d) {
+  const src = d.sources || [], V = src.reduce((s, x) => s + x.views, 0), C = src.reduce((s, x) => s + x.clicks, 0), A = src.reduce((s, x) => s + x.adds, 0);
+  const g = Object.fromEntries((d.groups || []).map((x) => [x.ab, x]));
+  const on = g.on || {}, off = g.off || {};
+  const k = (label, val, sub) => `<div class="card kpi"><span>${label}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  let h = '<div class="kpis">' +
+    k('Revenue from cross sells', egp(d.okb_revenue), `${num(d.okb_orders)} orders`) +
+    k('Tiles seen', num(V), `${num(d.pageviews)} product pages`) +
+    k('Click rate', pct(C, V), `${num(C)} clicks`) +
+    k('Add rate', pct(A, V), `${num(A)} added to cart`) +
+    k('AOV with cross sells', on.orders ? egp(on.aov) : '–', on.orders ? `${num(on.orders)} orders · ${on.upt} items/order` : 'no orders in the test yet') +
+    k('AOV without', off.orders ? egp(off.aov) : '–', off.orders ? `${num(off.orders)} orders · ${off.upt} items/order` : 'no orders in the test yet') +
+    '</div>';
+  const mx = Math.max(1, ...src.map((x) => x.revenue));
+  h += '<div class="card"><h2>By placement</h2><table><tr><th>Placement</th><th>Seen</th><th>Clicked</th><th>Click rate</th><th>Added</th><th>Orders</th><th>Units sold</th><th>Revenue</th></tr>' +
+    (src.length ? src.sort((a, b) => b.revenue - a.revenue || b.views - a.views).map((x) => `<tr><td>${esc(SRC[x.src] || x.src)}</td><td>${num(x.views)}</td><td>${num(x.clicks)}</td><td>${pct(x.clicks, x.views)}</td><td>${num(x.adds)}</td><td>${num(x.orders)}</td><td>${num(x.units)}</td><td class="heat" ${heat(x.revenue, mx)}>${egp(x.revenue)}</td></tr>`).join('') : '<tr><td colspan="8">Nothing recorded in this period yet.</td></tr>') +
+    '</table><div class="note">Seen = a tile scrolled into view (counted once per page). Revenue = what those lines sold for in web orders.</div></div>';
+  const ab = ['on', 'off', 'none'].filter((x) => g[x]);
+  h += '<div class="card" style="margin-top:16px"><h2>A/B: shoppers who see cross sells vs not</h2><table><tr><th>Group</th><th>Orders</th><th>Revenue</th><th>AOV</th><th>Items per order</th></tr>' +
+    ab.map((x) => `<tr><td>${{ on: 'See cross sells', off: 'Do not see them', none: 'Not in the test (old theme)' }[x]}</td><td>${num(g[x].orders)}</td><td>${egp(g[x].revenue)}</td><td>${egp(g[x].aov)}</td><td>${g[x].upt}</td></tr>`).join('') +
+    '</table><div class="note">Groups are assigned 50/50 per shopper and saved on the order. Under about 30 orders in a group the gap is noise.</div></div>';
+  const tc = d.top_clicked || [], ts = d.top_sold || [];
+  h += '<div class="grid2"><div class="card"><h2>Most clicked</h2><table><tr><th>Product</th><th>Seen</th><th>Clicked</th><th>Added</th></tr>' +
+    (tc.length ? tc.map((x) => `<tr><td>${pretty(x.handle)}</td><td>${num(x.views)}</td><td>${num(x.clicks)}</td><td>${num(x.adds)}</td></tr>`).join('') : '<tr><td colspan="4">No clicks yet.</td></tr>') +
+    '</table></div><div class="card"><h2>Most sold through cross sells</h2><table><tr><th>Product</th><th>Units</th><th>Revenue</th></tr>' +
+    (ts.length ? ts.map((x) => `<tr><td>${esc(x.title)}</td><td>${num(x.units)}</td><td>${egp(x.revenue)}</td></tr>`).join('') : '<tr><td colspan="3">No orders with cross-sell items yet.</td></tr>') +
+    '</table></div></div>';
+  document.getElementById('app').innerHTML = h;
+}
+document.getElementById('days').addEventListener('change', load);
+load();
+</script>
+</body>
+</html>
