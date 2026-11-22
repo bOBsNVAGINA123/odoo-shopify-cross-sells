@@ -160,7 +160,7 @@ function renderOdoo(d) {
   const o = d.odoo, app = document.getElementById('app');
   if (!o) { app.innerHTML = '<div class="card empty">Odoo numbers arrive with the nightly job.</div>'; return; }
   const S = o.channels.shops, O = o.channels.online;
-  const vs = (s, on) => { const ch = (on - s) / s * 100; return `<span class="d ${ch < 0 ? 'down' : 'up'}">online ${ch > 0 ? '+' : ''}${ch.toFixed(0)}% vs shops</span>`; };
+  const vs = (s, on) => { if (!s) return ''; const ch = (on - s) / s * 100; return `<span class="d ${ch < 0 ? 'down' : 'up'}">online ${ch > 0 ? '+' : ''}${ch.toFixed(0)}% vs shops</span>`; };
   const pair = (label, sv, ov, fmt, sub) => { const mx = Math.max(sv, ov) || 1;
     return `<div class="card kpi"><div class="l">${label}</div><div class="cmp"><span>Shops</span><i style="width:${sv / mx * 100}%"></i><b>${fmt(sv)}</b></div><div class="cmp on"><span>Online</span><i style="width:${ov / mx * 100}%"></i><b>${fmt(ov)}</b></div><div>${vs(sv, ov)}</div><small>${sub}</small></div>`; };
   const p1 = (x) => x.toFixed(1) + '%';
@@ -182,7 +182,7 @@ function renderOdoo(d) {
   h += `<div class="row2">${matrix('Shops', cx.shops)}${matrix('Online', cx.online)}</div>`;
   const tp = o.pairs_top || [];
   h += '<div class="row"><div class="card"><div class="hd"><h2>Most bought together</h2><span>shops + online</span></div><table><tr><th>Pair</th><th>Orders together</th><th>× more likely</th><th>In picks</th></tr>' +
-    tp.map((g) => `<tr><td>${nm(g.a)} <small>+</small> ${nm(g.b)}</td><td>${num(g.together)}</td><td>${g.lift}×</td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') +
+    tp.map((g) => `<tr><td>${nm(g.a)} <small>+</small> ${nm(g.b)}${g.a.name === g.b.name ? ' <small>(other colour)</small>' : ''}</td><td>${num(g.together)}</td><td>${g.lift}×</td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') +
     '</table><div class="note">× more likely = how much more often the second item is in an order with the first than in orders overall.</div></div>';
   const top = (lab, a) => `<h2 style="margin:4px 0 8px">${lab}</h2><table><tr><th>Product</th><th>Orders</th></tr>${a.slice(0, 10).map((x) => `<tr><td>${nm(x)}</td><td>${num(x.orders)} <small>${(100 * x.orders / x.of).toFixed(1)}%</small></td></tr>`).join('')}</table>`;
   h += `<div class="card"><div class="hd"><h2>Most frequent purchases</h2><span>share of orders</span></div>${top('Shops', o.top_products.shops)}<div style="height:14px"></div>${top('Online', o.top_products.online)}</div></div>`;
