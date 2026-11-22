@@ -37,6 +37,8 @@
   .ord{border-bottom:1px solid var(--line);padding:9px 0}.ord:last-child{border:0}.ord b{font-weight:600}.ord small{color:var(--soft)}
   .chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#eef3fb;color:#2c5281;margin-left:6px}
   .msg{padding:40px;text-align:center;color:var(--muted)}
+  .cmp{display:grid;grid-template-columns:48px 1fr auto;gap:8px;align-items:center;margin:6px 0}.cmp span{color:var(--soft);font-size:12px}.cmp i{height:10px;border-radius:5px;background:#9aa3ae}.cmp.on i{background:var(--blue)}.cmp b{font-size:15px}
+  .chip.off{background:#f1f1f1;color:var(--soft)}td small{color:var(--soft)}
   .card{overflow-x:auto}@media(max-width:600px){.kpi b{font-size:18px;white-space:normal}.kpi b .d{display:block;margin:2px 0 0}.kpis{gap:8px}}
 </style>
 </head>
@@ -46,6 +48,7 @@
     <div><h1>Odoo Cross Sells</h1><p>Add-ons picked from Odoo baskets, shown on product pages, best sellers and the cart</p></div>
     <div class="seg" id="seg"><button data-d="7">7 days</button><button data-d="14" class="on">14 days</button><button data-d="30">30 days</button><button data-d="90">90 days</button></div>
   </header>
+  <div class="seg tabs" id="tabs" style="margin-bottom:14px"><button data-v="online" class="on">Online cross sells</button><button data-v="odoo">Shops vs online (Odoo)</button></div>
   <div id="app"><div class="msg">Loading…</div></div>
 </main>
 <script>
@@ -63,7 +66,13 @@ function delta(cur, prev) {
   const ch = (cur - prev) / prev * 100, cls = Math.abs(ch) < 0.5 ? 'flat' : ch > 0 ? 'up' : 'down';
   return `<span class="d ${cls}">${ch > 0 ? '↑' : ch < 0 ? '↓' : ''}${Math.abs(ch).toFixed(1)}%</span>`;
 }
-let days = 14, charts = [];
+let days = 14, charts = [], view = 'online', last = null;
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); view = b.dataset.v;
+  document.getElementById('seg').style.visibility = view === 'odoo' ? 'hidden' : 'visible'; if (last) show(last);
+});
+const show = (d) => (view === 'odoo' ? renderOdoo : render)(d);
 document.getElementById('seg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); days = +b.dataset.d; load();
@@ -76,7 +85,7 @@ async function load() {
     const r = await fetch(`${FN}?days=${days}`, { headers: { Authorization: 'Bearer ' + tok } });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error === 'not_configured' ? 'The app secret is not set on the server yet (Supabase secret OKB_APP_SECRET).' : (d.error || r.status));
-    render(d);
+    last = d; show(d);
   } catch (e) { app.innerHTML = `<div class="card msg">Could not load: ${esc(e.message || e)}</div>`; }
   app.style.opacity = 1;
 }
@@ -143,6 +152,41 @@ function render(d) {
   if (on || off) charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: lab, datasets: [
     { label: 'With cross sells', data: d.daily.map((x) => x.aov_on), borderColor: '#426db3', backgroundColor: '#426db3', tension: .3, spanGaps: true },
     { label: 'Without', data: d.daily.map((x) => x.aov_off), borderColor: '#9aa3ae', backgroundColor: '#9aa3ae', borderDash: [5, 4], tension: .3, spanGaps: true }] }, options: base }));
+}
+/* Shops vs online, straight from Odoo (refreshed nightly by the picks job). Every rate shows x of n. */
+const CATS = ['Clothing', 'Toys', 'Baby Essentials', 'School', 'Party'];
+function renderOdoo(d) {
+  charts.forEach((c) => c.destroy()); charts = [];
+  const o = d.odoo, app = document.getElementById('app');
+  if (!o) { app.innerHTML = '<div class="card empty">Odoo numbers arrive with the nightly job.</div>'; return; }
+  const S = o.channels.shops, O = o.channels.online;
+  const vs = (s, on) => { const ch = (on - s) / s * 100; return `<span class="d ${ch < 0 ? 'down' : 'up'}">online ${ch > 0 ? '+' : ''}${ch.toFixed(0)}% vs shops</span>`; };
+  const pair = (label, sv, ov, fmt, sub) => { const mx = Math.max(sv, ov) || 1;
+    return `<div class="card kpi"><div class="l">${label}</div><div class="cmp"><span>Shops</span><i style="width:${sv / mx * 100}%"></i><b>${fmt(sv)}</b></div><div class="cmp on"><span>Online</span><i style="width:${ov / mx * 100}%"></i><b>${fmt(ov)}</b></div>${vs(sv, ov)}<small>${sub}</small></div>`; };
+  const p1 = (x) => x.toFixed(1) + '%';
+  let h = `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none">Odoo orders <b>${esc(o.from)} – ${esc(o.to)}</b>: ${num(S.orders)} shop orders (POS) vs ${num(O.orders)} online orders (Shopify, as booked in Odoo). Updated ${new Date(d.odoo_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</div>`;
+  h += '<div class="kpis">' +
+    pair('AOV', S.aov, O.aov, egp, 'average order value incl. VAT') +
+    pair('Items per order', S.upt, O.upt, (x) => x.toFixed(2), 'units per order') +
+    pair('Orders with 2+ different items', S.multi2 / S.orders * 100, O.multi2 / O.orders * 100, p1, `${num(S.multi2)} of ${num(S.orders)} vs ${num(O.multi2)} of ${num(O.orders)}`) +
+    pair('Orders with 5+ units', S.units5 / S.orders * 100, O.units5 / O.orders * 100, p1, `${num(S.units5)} of ${num(S.orders)} vs ${num(O.units5)} of ${num(O.orders)}`) + '</div>';
+  const gaps = o.gaps || [], gmax = Math.max(1, ...gaps.map((g) => g.missed));
+  const rate = (x, n) => `${n ? (100 * x / n).toFixed(0) : 0}% <small>${num(x)}/${num(n)}</small>`;
+  const nm = (p) => p.handle ? `<a href="https://shop-ourkids.com/products/${encodeURIComponent(p.handle)}" target="_blank" rel="noopener" style="color:inherit">${esc(p.name)}</a>` : esc(p.name);
+  h += '<div class="card"><div class="hd"><h2>Biggest gaps: bought together in shops, rarely online</h2><span>sorted by missed baskets</span></div><table><tr><th>When they buy</th><th>…they also buy</th><th>Shops</th><th>Online</th><th>Missed online baskets</th><th>In picks</th></tr>' +
+    (gaps.length ? gaps.map((g) => `<tr><td>${nm(g.a)}</td><td>${nm(g.b)}</td><td>${rate(g.shops_x, g.shops_n)}</td><td>${rate(g.online_x, g.online_n)}</td><td class="bar"><i style="width:${g.missed / gmax * 100}%"></i><span>${num(g.missed)}</span></td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">No gaps found.</td></tr>') +
+    `</table><div class="note">Missed online baskets = how many more online orders would have had both items if online matched the shops' rate (${esc(o.from)} – ${esc(o.to)}). A what-if from measured rates, not a forecast. Pairs need 8+ shared orders and 20+ orders with the first item in each channel.</div></div>`;
+  const cx = o.category, heat = (x, n) => { const r = n ? x / n : 0; return `style="background:rgba(66,109,179,${Math.min(0.55, r * 1.6).toFixed(2)})"`; };
+  const matrix = (lab, m) => `<div class="card"><div class="hd"><h2>${lab}: of orders with… how many also have…</h2></div><table><tr><th></th>${CATS.map((c) => `<th>${c === 'Baby Essentials' ? 'Baby' : c}</th>`).join('')}</tr>` +
+    CATS.map((A) => `<tr><td><b>${A === 'Baby Essentials' ? 'Baby' : A}</b> <small>${num(m[A].n)}</small></td>${CATS.map((B) => A === B ? '<td style="color:#ccc">–</td>' : `<td ${heat(m[A][B], m[A].n)}>${m[A].n ? (100 * m[A][B] / m[A].n).toFixed(1) : 0}%</td>`).join('')}</tr>`).join('') + '</table></div>';
+  h += `<div class="row2">${matrix('Shops', cx.shops)}${matrix('Online', cx.online)}</div>`;
+  const tp = o.pairs_top || [];
+  h += '<div class="row"><div class="card"><div class="hd"><h2>Most bought together</h2><span>shops + online</span></div><table><tr><th>Pair</th><th>Orders together</th><th>× more likely</th><th>In picks</th></tr>' +
+    tp.map((g) => `<tr><td>${nm(g.a)} <small>+</small> ${nm(g.b)}</td><td>${num(g.together)}</td><td>${g.lift}×</td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') +
+    '</table><div class="note">× more likely = how much more often the second item is in an order with the first than in orders overall.</div></div>';
+  const top = (lab, a) => `<h2 style="margin:4px 0 8px">${lab}</h2><table><tr><th>Product</th><th>Orders</th></tr>${a.slice(0, 10).map((x) => `<tr><td>${nm(x)}</td><td>${num(x.orders)} <small>${(100 * x.orders / x.of).toFixed(1)}%</small></td></tr>`).join('')}</table>`;
+  h += `<div class="card"><div class="hd"><h2>Most frequent purchases</h2><span>share of orders</span></div>${top('Shops', o.top_products.shops)}<div style="height:14px"></div>${top('Online', o.top_products.online)}</div></div>`;
+  app.innerHTML = h;
 }
 load();
 </script>
