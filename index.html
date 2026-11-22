@@ -38,7 +38,7 @@
   .chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#eef3fb;color:#2c5281;margin-left:6px}
   .msg{padding:40px;text-align:center;color:var(--muted)}
   .cmp{display:grid;grid-template-columns:48px 1fr auto;gap:8px;align-items:center;margin:6px 0}.cmp span{color:var(--soft);font-size:12px}.cmp i{height:10px;border-radius:5px;background:#9aa3ae}.cmp.on i{background:var(--blue)}.cmp b{font-size:15px}
-  .chip.off{background:#f1f1f1;color:var(--soft)}td small{color:var(--soft)}
+  .chip.off{background:#f1f1f1;color:var(--soft)}td small{color:var(--soft)}.l2 td:nth-child(2),.l2 th:nth-child(2){text-align:left}.kpi .d{margin-left:0}
   .card{overflow-x:auto}@media(max-width:600px){.kpi b{font-size:18px;white-space:normal}.kpi b .d{display:block;margin:2px 0 0}.kpis{gap:8px}}
 </style>
 </head>
@@ -162,7 +162,7 @@ function renderOdoo(d) {
   const S = o.channels.shops, O = o.channels.online;
   const vs = (s, on) => { const ch = (on - s) / s * 100; return `<span class="d ${ch < 0 ? 'down' : 'up'}">online ${ch > 0 ? '+' : ''}${ch.toFixed(0)}% vs shops</span>`; };
   const pair = (label, sv, ov, fmt, sub) => { const mx = Math.max(sv, ov) || 1;
-    return `<div class="card kpi"><div class="l">${label}</div><div class="cmp"><span>Shops</span><i style="width:${sv / mx * 100}%"></i><b>${fmt(sv)}</b></div><div class="cmp on"><span>Online</span><i style="width:${ov / mx * 100}%"></i><b>${fmt(ov)}</b></div>${vs(sv, ov)}<small>${sub}</small></div>`; };
+    return `<div class="card kpi"><div class="l">${label}</div><div class="cmp"><span>Shops</span><i style="width:${sv / mx * 100}%"></i><b>${fmt(sv)}</b></div><div class="cmp on"><span>Online</span><i style="width:${ov / mx * 100}%"></i><b>${fmt(ov)}</b></div><div>${vs(sv, ov)}</div><small>${sub}</small></div>`; };
   const p1 = (x) => x.toFixed(1) + '%';
   let h = `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none">Odoo orders <b>${esc(o.from)} – ${esc(o.to)}</b>: ${num(S.orders)} shop orders (POS) vs ${num(O.orders)} online orders (Shopify, as booked in Odoo). Updated ${new Date(d.odoo_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</div>`;
   h += '<div class="kpis">' +
@@ -173,7 +173,7 @@ function renderOdoo(d) {
   const gaps = o.gaps || [], gmax = Math.max(1, ...gaps.map((g) => g.missed));
   const rate = (x, n) => `${n ? (100 * x / n).toFixed(0) : 0}% <small>${num(x)}/${num(n)}</small>`;
   const nm = (p) => p.handle ? `<a href="https://shop-ourkids.com/products/${encodeURIComponent(p.handle)}" target="_blank" rel="noopener" style="color:inherit">${esc(p.name)}</a>` : esc(p.name);
-  h += '<div class="card"><div class="hd"><h2>Biggest gaps: bought together in shops, rarely online</h2><span>sorted by missed baskets</span></div><table><tr><th>When they buy</th><th>…they also buy</th><th>Shops</th><th>Online</th><th>Missed online baskets</th><th>In picks</th></tr>' +
+  h += '<div class="card"><div class="hd"><h2>Biggest gaps: bought together in shops, rarely online</h2><span>sorted by missed baskets</span></div><table class="l2"><tr><th>When they buy</th><th>…they also buy</th><th>Shops</th><th>Online</th><th>Missed online baskets</th><th>In picks</th></tr>' +
     (gaps.length ? gaps.map((g) => `<tr><td>${nm(g.a)}</td><td>${nm(g.b)}</td><td>${rate(g.shops_x, g.shops_n)}</td><td>${rate(g.online_x, g.online_n)}</td><td class="bar"><i style="width:${g.missed / gmax * 100}%"></i><span>${num(g.missed)}</span></td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">No gaps found.</td></tr>') +
     `</table><div class="note">Missed online baskets = how many more online orders would have had both items if online matched the shops' rate (${esc(o.from)} – ${esc(o.to)}). A what-if from measured rates, not a forecast. Pairs need 8+ shared orders and 20+ orders with the first item in each channel.</div></div>`;
   const cx = o.category, heat = (x, n) => { const r = n ? x / n : 0; return `style="background:rgba(66,109,179,${Math.min(0.55, r * 1.6).toFixed(2)})"`; };
