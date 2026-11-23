@@ -185,7 +185,7 @@ function renderAB(d) {
   h += `<div class="row" style="margin-top:14px"><div class="card"><div class="hd"><h2>Category mix</h2><span>share of revenue</span></div>${groups.map(mixRow).join('')}` +
     `<div class="note">${legend.map((c) => `<span class="chip" style="background:${CAT_COL[c] || '#c9ced6'};color:#fff">${esc(c === 'Unknown' ? 'No category' : c)}</span>`).join(' ')}${A.has_map ? ' Hover a block for its share.' : ' Categories arrive with the nightly job.'}</div></div>` +
     '<div class="card"><div class="hd"><h2>AOV per day</h2><span>control vs test</span></div>' + (running ? '<div class="chart"><canvas id="c2"></canvas></div>' : '<div class="empty">Appears once the test runs.</div>') + '</div></div>';
-  h += '<div class="note" style="margin-top:10px">Online store checkouts only: staff draft orders (PR gifts, phone orders) never pass the checkout, so they are not counted. Each shopper is put in a group 50/50 and the group is saved on the order. The control still sees the theme\'s own cart “Pair Well With”, which reads the same Odoo picks, so any lift is understated.</div>';
+  h += '<div class="note" style="margin-top:10px">Online store checkouts only: staff draft orders (PR gifts, phone orders) never pass the checkout, so they are not counted. Each shopper is put in a group 50/50 and the group is saved on the order. The control sees no cross sells anywhere: the theme\'s own cart “Pair Well With” stays hidden (checked on the live cart, 23 Nov).</div>';
   document.getElementById('app').innerHTML = h;
   if (!running) return;
   const lab = d.daily.map((x) => new Date(x.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
