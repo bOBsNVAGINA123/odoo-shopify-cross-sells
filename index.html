@@ -86,113 +86,144 @@ let days = 14, charts = [], view = 'online', last = null;
 document.getElementById('tabs').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); view = b.dataset.v;
-  document.getElementById('seg').style.visibility = view === 'odoo' ? 'hidden' : 'visible'; if (last) show(last);
+  document.getElementById('seg').style.visibility = view === 'online' ? 'visible' : 'hidden'; if (last) show(last);
 });
-const show = (d) => ({ odoo: renderOdoo, ab: renderAB }[view] || render)(d);
+const show = (d) => { const err = view === 'online' ? d.statsErr : view === 'ab' ? d.shErr : (!d.odoo && (d.shErr || d.statsErr));
+  if (err) { charts.forEach((c) => c.destroy()); charts = []; document.getElementById('app').innerHTML = `<div class="card msg">${esc(err)} <button onclick="load()">Retry</button></div>`; return; }
+  ({ odoo: renderOdoo, ab: renderAB }[view] || render)(d); };
 document.getElementById('seg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); days = +b.dataset.d; load();
 });
 
+/* Shopify straight from the browser (direct API access, as the staff member who opened the app). */
+async function AQ(query, variables) {
+  const r = await fetch('shopify:admin/api/2026-10/graphql.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+  const j = await r.json(); if (j.errors) throw new Error(j.errors[0]?.message || 'Shopify error'); return j.data;
+}
+async function SQ(q) {
+  const t = (await AQ('query($q: String!) { shopifyqlQuery(query: $q) { parseErrors tableData { columns { name } rows } } }', { q })).shopifyqlQuery;
+  if (t.parseErrors.length) throw new Error(t.parseErrors[0]);
+  const cols = t.tableData.columns.map((c) => c.name);
+  return t.tableData.rows.map((r) => Array.isArray(r) ? Object.fromEntries(cols.map((c, i) => [c, r[i]])) : r);
+}
+async function shopifyData() {
+  const m = (await AQ('{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }')).currentAppInstallation;
+  const A = m.ab?.jsonValue, out = { owner: m.id, A, odoo: m.odoo, goal: m.goal, ses: [], dly: [] };
+  if (A) [out.ses, out.dly] = await Promise.all([
+    SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
+    SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
+  return out;
+}
+async function trackerStats() {
+  const tok = await shopify.idToken();
+  const r = await fetch(`${FN}?days=${days}`, { headers: { Authorization: 'Bearer ' + tok }, signal: AbortSignal.timeout(25000) });
+  const d = await r.json().catch(() => ({ error: r.status === 504 ? 'busy' : r.status }));
+  if (!r.ok) throw new Error(d.error || r.status);
+  return d;
+}
 async function load() {
   const app = document.getElementById('app'); app.style.opacity = .5;
-  try {
-    const tok = await shopify.idToken();
-    const r = await fetch(`${FN}?days=${days}`, { headers: { Authorization: 'Bearer ' + tok }, signal: AbortSignal.timeout(25000) });
-    const d = await r.json().catch(() => ({ error: r.status === 504 ? 'busy' : r.status }));
-    if (!r.ok) throw new Error(d.error === 'not_configured' ? 'The app secret is not set on the server yet (Supabase secret OKB_APP_SECRET).' : (d.error || r.status));
-    last = d; show(d);
-  } catch (e) { const busy = e.name === 'TimeoutError' || e.message === 'busy';
-    app.innerHTML = `<div class="card msg">${busy ? 'The data server is busy right now. Try again in a few minutes.' : 'Could not load: ' + esc(e.message || e)} <button onclick="load()">Retry</button></div>`; }
-  app.style.opacity = 1;
+  const [st, sh] = await Promise.allSettled([trackerStats(), shopifyData()]);
+  const d = st.status === 'fulfilled' ? st.value : { statsErr: st.reason?.name === 'TimeoutError' || st.reason?.message === 'busy' ? 'The data server is busy right now. Try again in a few minutes.' : 'Could not load: ' + (st.reason?.message || st.reason) };
+  if (sh.status === 'fulfilled') { d.sh = sh.value; if (sh.value.odoo?.jsonValue) { d.odoo = sh.value.odoo.jsonValue; d.odoo_at = sh.value.odoo.updatedAt; } }
+  else d.shErr = 'Could not read Shopify: ' + (sh.reason?.message || sh.reason);
+  last = d; show(d); app.style.opacity = 1;
 }
 
-/* A/B test, laid out like the Ourkids AB Testing app: metric cards (★ = the goal that decides the test),
-   then Metric details with uplift, 95% range, probability to beat control and to be best.
-   Exact spreads are stored per group, so intervals are Welch (means) or two-proportion (shares), not assumed. */
+/* A/B test = a Shopify rollout (live theme vs the cross-sell copy). Shopify splits shoppers and counts sessions, cart
+   adds, checkouts and conversions per group (read live here). Money comes from Odoo per order (GP on the 4% basis),
+   matched to the group by order number in the nightly job. ★ = the goal that decides the test. */
 const GOALS = {
-  aov_capped: { lab: 'AOV, big orders capped', m: (x) => [x.aovc, x.aovc_sd, x.n], f: egp, per: 'order', tip: 'Average order value with every order above the cap counted at the cap, so one huge order cannot decide the test.' },
-  aov: { lab: 'AOV', m: (x) => [x.aov, x.aov_sd, x.n], f: egp, per: 'order', tip: 'Average order value, every order at full value.' },
-  upt: { lab: 'Items per order', m: (x) => [x.upt, x.upt_sd, x.n], f: (v) => (+v).toFixed(2), tip: 'Units per order (UPT).' },
-  multi: { lab: 'Orders with 2+ categories', p: (x) => [x.multi, x.n], tip: 'Share of orders with items from at least two categories (Clothing, Toys, Baby, School, Party...).' },
-  cloth_toy: { lab: 'Clothing orders with a toy', p: (x) => [x.cloth_toy, x.cloth], tip: 'Of orders with clothing, the share that also have a toy. In shops it is far higher than online.' },
+  gp_session: { lab: 'Gross profit per session', ps: (x) => [x.gp, x.gp2, x.sessions], f: (v) => 'EGP ' + (+v).toFixed(2), est: 1, tip: 'Odoo gross profit (4% basis) of the group\'s orders ÷ its sessions. The money the test is really about.' },
+  rps: { lab: 'Revenue per session', ps: (x) => [x.rev, x.rev2, x.sessions], f: (v) => 'EGP ' + (+v).toFixed(2), est: 1, tip: 'Order revenue (Odoo, VAT in) ÷ sessions.' },
+  cvr: { lab: 'Conversion rate', p: (x) => [x.conv, x.sessions], tip: 'Sessions that completed checkout ÷ sessions (Shopify).' },
+  atc: { lab: 'Add-to-cart rate', p: (x) => [x.atc, x.sessions], tip: 'Sessions with an add to cart ÷ sessions (Shopify).' },
+  checkout: { lab: 'Checkout rate', p: (x) => [x.co, x.sessions], tip: 'Sessions that reached checkout ÷ sessions (Shopify).' },
+  aov_capped: { lab: 'AOV, big orders capped', m: (x, c) => [x.rev_c, x.rev_c2, x.orders], f: egp, tip: 'Average order value with orders above the cap counted at the cap, so one huge order cannot decide the test.' },
+  aov: { lab: 'AOV', m: (x) => [x.rev, x.rev2, x.orders], f: egp, tip: 'Average order value (Odoo, VAT in).' },
+  upt: { lab: 'Items per order', m: (x) => [x.units, x.units2, x.orders], f: (v) => (+v).toFixed(2), tip: 'Units per order (UPT), shipping and gift wrap left out.' },
+  multi: { lab: 'Orders with 2+ categories', p: (x) => [x.multi, x.orders], tip: 'Share of orders with items from at least two categories.' },
+  cloth_toy: { lab: 'Clothing orders with a toy', p: (x) => [x.cloth_toy, x.cloth], tip: 'Of orders with clothing, the share that also have a toy.' },
 };
 const erf = (x) => { const s = Math.sign(x), a = Math.abs(x), t = 1 / (1 + 0.3275911 * a); return s * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a)); };
 const normCdf = (z) => 0.5 * (1 + erf(z / Math.SQRT2));
 function val(k, x) {          /* value, standard error, sample size of one group */
   if (!x) return null; const G = GOALS[k];
-  if (G.p) { const [a, n] = G.p(x), v = n ? a / n : 0; return { v, se: n ? Math.sqrt(v * (1 - v) / n) : 0, n, a, f: (y) => (100 * y).toFixed(1) + '%' }; }
-  const [m, sd, n] = G.m(x); return { v: +m, se: n ? sd / Math.sqrt(n) : 0, n, f: G.f };
+  if (G.p) { const [a, n] = G.p(x), v = n ? a / n : 0; return { v, se: n ? Math.sqrt(v * (1 - v) / n) : 0, n, f: (y) => (100 * y).toFixed(2) + '%' }; }
+  const [sum, sq, n] = (G.ps || G.m)(x), v = n ? sum / n : 0, varr = n > 1 ? Math.max(0, (sq / n - v * v) * n / (n - 1)) : 0;
+  return { v, se: n ? Math.sqrt(varr / n) : 0, n, f: G.f };
 }
-function cmp(k, on, off) {     /* test (sees cross sells) vs control (does not) */
-  const T = val(k, on), C = val(k, off);
-  if (!T || !C || T.n < 30 || C.n < 30 || !C.v) return null;
-  const d = T.v - C.v, se = Math.sqrt(T.se ** 2 + C.se ** 2) || 1e-9, p = normCdf(d / se);
-  return { up: d / C.v * 100, lo: (d - 1.96 * se) / C.v * 100, hi: (d + 1.96 * se) / C.v * 100, pBeat: Math.min(99.9, Math.max(0.1, p * 100)), d };
+function cmp(k, T, C) {
+  const t = val(k, T), c = val(k, C);
+  if (!t || !c || !c.v || (T.orders || 0) < 30 || (C.orders || 0) < 30) return null;
+  const d = t.v - c.v, se = Math.sqrt(t.se ** 2 + c.se ** 2) || 1e-9, p = normCdf(d / se);
+  return { up: d / c.v * 100, lo: (d - 1.96 * se) / c.v * 100, hi: (d + 1.96 * se) / c.v * 100, pBeat: Math.min(99.9, Math.max(0.1, p * 100)), d };
 }
 async function setGoal(goal) {
-  const tok = await shopify.idToken();
-  const r = await fetch(FN, { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ goal }) });
-  if (!r.ok) { shopify.toast.show('Could not save the goal', { isError: true }); return; }
-  shopify.toast.show('Goal saved'); detail = goal; load();
+  try {
+    const r = await AQ('mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }',
+      { m: [{ ownerId: last.sh.owner, namespace: 'okb', key: 'goal', type: 'single_line_text_field', value: goal }] });
+    if (r.metafieldsSet.userErrors.length) throw new Error(r.metafieldsSet.userErrors[0].message);
+    shopify.toast.show('Goal saved'); detail = goal; load();
+  } catch (e) { shopify.toast.show('Could not save the goal: ' + e.message, { isError: true }); }
 }
 let detail = null;
 const showDetail = (k) => { detail = k; if (last) renderAB(last); document.getElementById('md')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 const CAT_COL = { Clothing: '#426db3', Toys: '#e0a33a', 'Baby Essentials': '#5fb38a', School: '#8e6cc4', Party: '#e06a7a' };
 function renderAB(d) {
   charts.forEach((c) => c.destroy()); charts = [];
-  const A = d.ab || {}, G = Object.fromEntries((A.groups || []).map((x) => [x.ab, x])), on = G.on, off = G.off, goal = A.goal || 'aov_capped';
-  const running = !!A.test_start, groups = running ? [['off', 'Control', 'Without cross sells', 'c'], ['on', 'Test', 'With cross sells', 'v']] : [['none', 'Now', 'All web orders (no test yet)', 'c']];
-  const k0 = detail && GOALS[detail] ? detail : goal, late = A.goal_at && A.test_start && new Date(A.goal_at) > new Date(A.test_start + 'T00:00:00+02:00');
-  const ran = running ? Math.max(1, Math.round((Date.now() - new Date(A.test_start + 'T00:00:00+02:00')) / 864e5)) : 0;
-  const ordersDay = running ? ((on?.n || 0) + (off?.n || 0)) / Math.min(ran, days) : 0;
-  let h = `<div class="card" style="margin-bottom:14px"><div class="hd"><h2>Cross sells vs none</h2><span class="badge ${running ? 'b-win' : 'b-wait'}">${running ? 'Running' : 'Not running'}</span></div>` +
-    `<div class="abmeta"><span>${running ? `Started <b>${esc(A.test_start)}</b> · ${ran} day${ran > 1 ? 's' : ''}` : 'Starts when the cross-sell theme is published'}</span><span>Split <b>50 / 50</b> per shopper</span><span>★ Goal <b>${esc(GOALS[goal].lab)}</b></span><span>Window <b>${esc(d.from)} – ${esc(d.to)}</b></span></div>` +
-    (late ? '<div class="note" style="color:#c0262d"><b>The goal was changed after the test started: treat the result with caution.</b></div>' : '') + '</div>';
-  /* metric cards */
+  const S = d.sh || {}, A = S.A, app = document.getElementById('app');
+  if (!A) { app.innerHTML = '<div class="card empty">A/B numbers arrive with the nightly job.</div>'; return; }
+  const sesBy = Object.fromEntries(S.ses.map((r) => [String(r.rollout_treatment_id), r]));
+  const G = {}; for (const [id, g] of Object.entries(A.groups)) { const r = sesBy[id] || {}; G[id] = { ...g, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 }; }
+  const running = !!A.rollout, ids = Object.keys(G).sort((a, b) => (G[a].label === 'Test') - (G[b].label === 'Test'));
+  const C = running ? G[ids.find((i) => G[i].label === 'Control')] : null, T = running ? G[ids.find((i) => G[i].label === 'Test')] : null;
+  const groups = ids.map((id) => [id, G[id].label, G[id].label === 'Test' ? 'With cross sells' : G[id].label === 'Control' ? 'Without cross sells' : 'All shoppers (no test yet)', G[id].label === 'Test' ? 'v' : 'c']);
+  const goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'gp_session', k0 = detail && GOALS[detail] ? detail : goal;
+  const nDays = Math.max(1, Math.round((new Date(A.until) - new Date(A.start)) / 864e5) + 1), sesDay = ids.reduce((a, i) => a + G[i].sessions, 0) / nDays;
+  const late = running && S.goal?.updatedAt && new Date(S.goal.updatedAt) > new Date(A.start + 'T00:00:00+02:00');
+  const srm = running && C && T && (C.sessions + T.sessions) ? (() => { const n = C.sessions + T.sessions, e = T.split / 100, z = (T.sessions - n * e) / Math.sqrt(n * e * (1 - e)); return Math.abs(z) > 3 ? `Traffic split is off: ${pct(T.sessions, n)} of sessions are in Test, ${T.split}% expected. Check the rollout before trusting the numbers.` : ''; })() : '';
+  let h = `<div class="card" style="margin-bottom:14px"><div class="hd"><h2>${running ? esc(A.rollout.name) : 'Cross sells vs none'}</h2><span class="badge ${running ? (A.rollout.status === 'ACTIVE' ? 'b-win' : 'b-flat') : 'b-wait'}">${running ? esc(A.rollout.status.toLowerCase()) : 'Not running'}</span></div>` +
+    `<div class="abmeta"><span>${running ? `Started <b>${esc(A.start)}</b> · ${nDays} day${nDays > 1 ? 's' : ''}` : 'Start it in Shopify: Online Store → Themes → test the cross-sell copy against the live theme, 50/50'}</span>` +
+    (running ? groups.map(([id, short]) => `<span>${short} <b>${esc(G[id].theme)}</b> · ${G[id].split}%</span>`).join('') : `<span>Baseline <b>${esc(A.start)} – ${esc(A.until)}</b></span>`) +
+    `<span>★ Goal <b>${esc(GOALS[goal].lab)}</b></span><span>Odoo numbers as of <b>${new Date(A.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b></span></div>` +
+    (srm ? `<div class="note" style="color:#c0262d"><b>${esc(srm)}</b></div>` : '') + (late ? '<div class="note" style="color:#c0262d"><b>The goal was changed after the test started: treat the result with caution.</b></div>' : '') + '</div>';
   h += '<div class="kms">' + Object.keys(GOALS).map((k) => {
-    const g = GOALS[k], c = running ? cmp(k, on, off) : null, vals = groups.map(([ab]) => val(k, G[ab])), mx = Math.max(1e-9, ...vals.map((x) => x ? x.v : 0));
-    const est = c && g.per === 'order' ? c.d * ordersDay * 30 : null;
+    const g = GOALS[k], c = running ? cmp(k, T, C) : null, vals = groups.map(([id]) => val(k, G[id])), mx = Math.max(1e-9, ...vals.map((x) => x ? x.v : 0));
+    const est = c && g.est ? c.d * sesDay * 30 : null;
     return `<div class="km${k0 === k ? ' on' : ''}" onclick="showDetail('${k}')" title="${esc(g.tip)}"><div class="t">${k === goal ? '<span class="star">★</span>' : ''}${g.lab}</div>` +
       (c ? `<div class="upl"><span class="${c.up >= 0 ? 'up' : 'dn'}">${c.up >= 0 ? '↑' : '↓'} ${Math.abs(c.up).toFixed(1)}%</span><span class="ci">±${((c.hi - c.lo) / 2).toFixed(1)}</span></div>` +
-        (c.lo < 0 && c.hi > 0 ? '<div class="tiny warn">range includes 0, not conclusive</div>' : '<div class="tiny">&nbsp;</div>') + (est != null ? `<div class="est">EST. ${est >= 0 ? '+' : '−'}${egp(Math.abs(est))} / MONTH</div>` : '<div class="est">&nbsp;</div>')
+        (c.lo < 0 && c.hi > 0 ? '<div class="tiny warn">range includes 0, not conclusive</div>' : '<div class="tiny">&nbsp;</div>') + (est != null ? `<div class="est">EST. ${est >= 0 ? '+' : '−'}${egp(Math.abs(est))} / MONTH${k === 'gp_session' ? ' GP' : ''}</div>` : '<div class="est">&nbsp;</div>')
         : `<div class="upl"><span class="muted">${running ? 'needs 30+ orders a side' : 'no test yet'}</span></div><div class="tiny">&nbsp;</div><div class="est">&nbsp;</div>`) +
-      `<div class="kmbars">${groups.map(([ab, short, , cls], i) => `<div><span class="kv">${vals[i] ? vals[i].f(vals[i].v) : '–'}</span><div class="kmbar ${cls}" style="height:${Math.max(4, Math.round((vals[i] ? vals[i].v : 0) / mx * 56))}px"></div><small>${short}</small></div>`).join('')}</div>` +
+      `<div class="kmbars">${groups.map(([, short, , cls], i) => `<div><span class="kv">${vals[i] ? vals[i].f(vals[i].v) : '–'}</span><div class="kmbar ${cls}" style="height:${Math.max(4, Math.round((vals[i] ? vals[i].v : 0) / mx * 56))}px"></div><small>${short}</small></div>`).join('')}</div>` +
       (k === goal ? '' : `<button class="mk" onclick="event.stopPropagation();setGoal('${k}')">☆ Make goal</button>`) + '</div>';
   }).join('') + '</div>';
-  /* metric details */
-  const g = GOALS[k0], c = running ? cmp(k0, on, off) : null, rows = groups.map(([ab]) => val(k0, G[ab]));
+  const g = GOALS[k0], c = running ? cmp(k0, T, C) : null, rows = groups.map(([id]) => val(k0, G[id]));
   const ci = rows.map((r) => r ? [r.v - 1.96 * r.se, r.v + 1.96 * r.se] : [0, 0]), lo = Math.min(...ci.map((x) => x[0])), hi = Math.max(...ci.map((x) => x[1])), span = (hi - lo) || 1;
   h += `<div class="card tw" id="md" style="margin-top:14px"><div class="hd"><h2>Metric details: ${k0 === goal ? '★ ' : ''}${g.lab}</h2><span>${esc(g.tip)}</span></div>` +
-    `<table class="sig"><tr><th>Group</th><th>Orders</th><th>Uplift</th><th>Probability to beat control</th><th>Probability to be best</th><th style="min-width:230px">Value · 95% range</th></tr>` +
-    groups.map(([ab, short, name, cls], i) => { const r = rows[i]; if (!r) return ''; const isC = i === 0;
-      return `<tr><td><span class="chipG ${cls}">${short[0]}</span><b>${name}</b></td><td>${num(G[ab].n)}</td>` +
+    `<table class="sig"><tr><th>Group</th><th>Sessions</th><th>Orders</th><th>Uplift</th><th>Probability to beat control</th><th>Probability to be best</th><th style="min-width:230px">Value · 95% range</th></tr>` +
+    groups.map(([id, short, name, cls], i) => { const r = rows[i], isC = cls === 'c'; if (!r) return '';
+      return `<tr><td><span class="chipG ${cls}">${short[0]}</span><b>${name}</b></td><td>${num(G[id].sessions)}</td><td>${num(G[id].orders)}</td>` +
         `<td>${isC || !c ? '<span class="muted">n/a</span>' : `<span class="${c.up >= 0 ? 'up' : 'dn'}">${c.up >= 0 ? '↑' : '↓'} ${Math.abs(c.up).toFixed(1)}%</span> <small class="muted">[${c.lo >= 0 ? '+' : ''}${c.lo.toFixed(1)}, ${c.hi >= 0 ? '+' : ''}${c.hi.toFixed(1)}]</small>${c.lo < 0 && c.hi > 0 ? ' <span class="badge b-wait" style="font-size:10px">includes 0</span>' : ''}`}</td>` +
         `<td>${isC || !c ? '<span class="muted">n/a</span>' : `<b>${c.pBeat.toFixed(0)}%</b>`}</td><td>${c ? `<b>${(isC ? 100 - c.pBeat : c.pBeat).toFixed(0)}%</b>` : '<span class="muted">–</span>'}</td>` +
         `<td><div class="civ"><span>${r.f(ci[i][0])}</span><div class="citrack"><i style="left:${(ci[i][0] - lo) / span * 100}%;width:${(ci[i][1] - ci[i][0]) / span * 100}%"></i><b style="left:${(r.v - lo) / span * 100}%"></b></div><span>${r.f(ci[i][1])}</span></div></td></tr>`; }).join('') +
-    `</table><div class="note">95% ranges: Welch for averages, two-proportion for shares, from each group's real spread. A range that includes 0 is not a result. A verdict needs 30+ orders a side; a lift under about 6% needs roughly 4 weeks to show.</div></div>`;
-  /* orders summary */
-  h += `<div class="card tw" style="margin-top:14px"><div class="hd"><h2>Orders</h2><span>web orders in the window</span></div><table><tr><th>Group</th><th>Orders</th><th>Revenue</th><th>AOV</th><th>Items per order</th><th>Capped at ${egp(A.cap)}</th><th>Left out</th><th>AOV vs control</th></tr>` +
-    groups.map(([ab, short, name, cls], i) => { const x = G[ab]; if (!x) return `<tr><td><span class="chipG ${cls}">${short[0]}</span>${name}</td><td colspan="7" class="muted">no orders yet</td></tr>`;
-      const lft = Object.entries(x.excluded || {}), cA = i ? cmp('aov', on, off) : null;
-      return `<tr><td><span class="chipG ${cls}">${short[0]}</span>${name}</td><td>${num(x.n)}</td><td>${egp(x.revenue)}</td><td>${egp(x.aov)}</td><td>${(+x.upt).toFixed(2)}</td><td>${num(x.capped)}</td>` +
-        `<td title="${esc(lft.map(([r, n]) => `${r}: ${n}`).join(', '))}">${num(lft.reduce((a, [, n]) => a + n, 0))}</td><td>${cA ? `<span class="${cA.up >= 0 ? 'up' : 'dn'}">${cA.up >= 0 ? '↑' : '↓'} ${Math.abs(cA.up).toFixed(1)}%</span>` : '<span class="muted">n/a</span>'}</td></tr>`; }).join('') +
-    `</table><div class="note">Left out: test orders, free orders and orders with 10+ of one item. Capped: orders above ${egp(A.cap)} (top 1% of web orders, 2–22 Nov) count at the cap in the capped AOV.</div></div>`;
-  /* category mix + AOV per day */
-  const mixRow = ([ab, short, name]) => { const m = G[ab]?.mix || {}, tot = Object.values(m).reduce((a, b) => a + b, 0) || 1, keys = Object.keys(m).sort((a, b) => (a === 'Unknown') - (b === 'Unknown') || m[b] - m[a]);
+    `</table><div class="note">95% ranges from each group's real spread (per order or per session). A range that includes 0 is not a result. A verdict needs 30+ orders a side; a lift under about 6% needs roughly 4 weeks to show.</div></div>`;
+  h += `<div class="card tw" style="margin-top:14px"><div class="hd"><h2>Funnel and money</h2><span>${esc(A.start)} – ${esc(A.until)}</span></div><table><tr><th>Group</th><th>Sessions</th><th>Added to cart</th><th>Reached checkout</th><th>Orders</th><th>Revenue</th><th>Gross profit</th><th>GP per session</th></tr>` +
+    groups.map(([id, short, name, cls]) => { const x = G[id]; return `<tr><td><span class="chipG ${cls}">${short[0]}</span>${name}</td><td>${num(x.sessions)}</td><td>${num(x.atc)} <small>${pct(x.atc, x.sessions)}</small></td><td>${num(x.co)} <small>${pct(x.co, x.sessions)}</small></td><td>${num(x.orders)} <small>${pct(x.orders, x.sessions, 2)}</small></td><td>${egp(x.rev)}</td><td>${egp(x.gp)}</td><td>EGP ${(x.sessions ? x.gp / x.sessions : 0).toFixed(2)}</td></tr>`; }).join('') +
+    `</table><div class="note">Sessions, cart adds and checkouts: Shopify, per rollout group. Orders, revenue and gross profit: Odoo, matched by order number (${groups.map(([id, short]) => `${short} ${num(G[id].orders)} of ${num(G[id].shopify_orders)} Shopify orders found in Odoo`).join(' · ')}). GP = total × 0.96 − cost (4% remitted). Online store checkouts only.</div></div>`;
+  const mixRow = ([id, , name]) => { const m = G[id].mix || {}, tot = Object.values(m).reduce((a, b) => a + b, 0) || 1, keys = Object.keys(m).sort((a, b) => m[b] - m[a]);
     return `<div class="mix"><span>${name}</span><div>${keys.map((c) => `<i title="${esc(c)}: ${pct(m[c], tot)} · ${egp(m[c])}" style="width:${100 * m[c] / tot}%;background:${CAT_COL[c] || '#c9ced6'}"></i>`).join('')}</div></div>`; };
-  const legend = [...new Set(groups.flatMap(([ab]) => Object.keys(G[ab]?.mix || {})))].sort((a, b) => (a === 'Unknown') - (b === 'Unknown'));
+  const legend = [...new Set(groups.flatMap(([id]) => Object.keys(G[id].mix || {})))].filter((c) => CAT_COL[c]);
   h += `<div class="row" style="margin-top:14px"><div class="card"><div class="hd"><h2>Category mix</h2><span>share of revenue</span></div>${groups.map(mixRow).join('')}` +
-    `<div class="note">${legend.map((c) => `<span class="chip" style="background:${CAT_COL[c] || '#c9ced6'};color:#fff">${esc(c === 'Unknown' ? 'No category' : c)}</span>`).join(' ')}${A.has_map ? ' Hover a block for its share.' : ' Categories arrive with the nightly job.'}</div></div>` +
-    '<div class="card"><div class="hd"><h2>AOV per day</h2><span>control vs test</span></div>' + (running ? '<div class="chart"><canvas id="c2"></canvas></div>' : '<div class="empty">Appears once the test runs.</div>') + '</div></div>';
-  h += '<div class="note" style="margin-top:10px">Online store checkouts only: staff draft orders (PR gifts, phone orders) never pass the checkout, so they are not counted. Each shopper is put in a group 50/50 and the group is saved on the order. The control sees no cross sells anywhere: the theme\'s own cart “Pair Well With” stays hidden (checked on the live cart, 23 Nov).</div>';
-  document.getElementById('app').innerHTML = h;
+    `<div class="note">${legend.map((c) => `<span class="chip" style="background:${CAT_COL[c]};color:#fff">${esc(c)}</span>`).join(' ')} <span class="chip" style="background:#c9ced6;color:#fff">Other</span> Hover a block for its share.</div></div>` +
+    '<div class="card"><div class="hd"><h2>Conversion rate per day</h2><span>control vs test</span></div>' + (running ? '<div class="chart"><canvas id="c2"></canvas></div>' : '<div class="empty">Appears once the test runs.</div>') + '</div></div>';
+  app.innerHTML = h;
   if (!running) return;
-  const lab = d.daily.map((x) => new Date(x.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-  charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: lab, datasets: [
-    { label: 'Test: with cross sells', data: d.daily.map((x) => x.aov_on), borderColor: '#426db3', backgroundColor: '#426db3', tension: .3, spanGaps: true },
-    { label: 'Control: without', data: d.daily.map((x) => x.aov_off), borderColor: '#9aa3ae', backgroundColor: '#9aa3ae', borderDash: [5, 4], tension: .3, spanGaps: true }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => num(v) } } } } }));
+  const days_ = [...new Set(S.dly.map((r) => r.day))].sort(), lab = days_.map((x) => new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+  const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
+  charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: lab, datasets: groups.map(([id, short, name, cls]) => ({ label: name, data: series(id), borderColor: cls === 'v' ? '#426db3' : '#9aa3ae', backgroundColor: cls === 'v' ? '#426db3' : '#9aa3ae', borderDash: cls === 'v' ? [] : [5, 4], tension: .3, spanGaps: true })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => v + '%' } } } } }));
 }
 function render(d) {
   charts.forEach((c) => c.destroy()); charts = [];
