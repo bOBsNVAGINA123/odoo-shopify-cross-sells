@@ -168,24 +168,45 @@ async function liveAB(cap) {
     for (const c of cats) g.mix[c] = (g.mix[c] || 0) + o.cats[c];
     if (cats.length >= 2) g.multi++; if (o.cats.Clothing != null) { g.cloth++; if (o.cats.Toys != null) g.cloth_toy++; }
     orders.push([name, o.g, Math.round(v * 100) / 100, o.units, cats.sort().join('|')]); }
-  return { rollout: r ? { id: r.id, name: r.name, status: r.status } : null, start, until, groups: G, orders, at: new Date().toISOString(), cap, live: true };
+  return { rollout: r ? { id: r.id, name: r.name, status: r.status } : null, rolloutStart: r ? r.startedAt : null, start, until, groups: G, orders, at: new Date().toISOString(), cap, live: true };
+}
+/* Today's cross-sell sales, live: today's web orders and their lines tagged _okb (the nightly job covers earlier days). */
+async function liveXs(fromISO) {
+  const by = {}, lines = []; let after = null;
+  for (let page = 0; page < 40; page++) {
+    const q = `query($a: String) { orders(first: 25, after: $a, query: "created_at:>='${fromISO}' source_name:web") { pageInfo { hasNextPage endCursor }
+      nodes { name createdAt totalPriceSet { shopMoney { amount } } lineItems(first: 20) { nodes { title quantity discountedTotalSet { shopMoney { amount } } customAttributes { key value } } } } } }`;
+    const r = (await AQ(q, { a: after })).orders;
+    for (const o of r.nodes) { const xs = o.lineItems.nodes.map((l) => [l, (l.customAttributes.find((a) => a.key === '_okb')?.value || '').split(':')[0]]).filter(([, src]) => src);
+      for (const src of new Set(xs.map(([, x]) => x))) (by[src] ||= { orders: 0, units: 0, rev: 0 }).orders++;
+      for (const [l, src] of xs) { by[src].units += l.quantity; by[src].rev += +l.discountedTotalSet.shopMoney.amount; lines.push([o.name, o.createdAt, +o.totalPriceSet.shopMoney.amount, l.title, l.quantity, +l.discountedTotalSet.shopMoney.amount, src]); } }
+    if (!r.pageInfo.hasNextPage) break; after = r.pageInfo.endCursor;
+  }
+  return { by, lines };
 }
 async function shopifyData() {
-  const m = (await AQ('{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } online: metafield(namespace: "okb", key: "online") { jsonValue } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }')).currentAppInstallation;
-  let A = m.ab?.jsonValue;
-  try { A = await liveAB(A?.cap || 6185); } catch (e) { console.warn('live A/B failed, using last night', e); }   /* live from Shopify; last night's copy only as fallback */
-  const out = { owner: m.id, A, odoo: m.odoo, online: m.online, goal: m.goal, ses: [], dly: [] };
-  if (A) [out.ses, out.dly] = await Promise.all([
-    SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
-    SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
+  const [m, A0] = await Promise.all([
+    AQ('{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } online: metafield(namespace: "okb", key: "online") { jsonValue } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }').then((x) => x.currentAppInstallation),
+    liveAB(6185).catch((e) => { console.warn('live A/B failed, using last night', e); return null; })]);
+  const A = A0 || m.ab?.jsonValue;   /* live from Shopify; last night's copy only as fallback */
+  const out = { owner: m.id, A, odoo: m.odoo, online: m.online, goal: m.goal, ses: [], dly: [], xs: null };
+  if (A) {
+    const today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), from = A.rollout && A.start === today ? A.rolloutStart : today + 'T00:00:00+02:00';
+    [out.ses, out.dly, out.xs] = await Promise.all([
+      SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
+      SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`),
+      A.rollout ? liveXs(from).catch((e) => { console.warn('live cross-sell orders failed', e); return null; }) : null]);
+  }
   return out;
 }
+let loadedOnce = false, loading = false;
 async function load() {
-  const app = document.getElementById('app'); app.style.opacity = .5;
+  if (loading) return; loading = true;
+  const app = document.getElementById('app'); if (!loadedOnce) app.style.opacity = .5; else document.querySelectorAll('.livepill').forEach((x) => x.textContent = 'Updating…');
   const d = {};
   try { d.sh = await shopifyData(); if (d.sh.odoo?.jsonValue) { d.odoo = d.sh.odoo.jsonValue; d.odoo_at = d.sh.odoo.updatedAt; } }
   catch (e) { d.shErr = 'Could not read Shopify: ' + (e.message || e); }
-  last = d; show(d); app.style.opacity = 1;
+  const y = window.scrollY; last = d; show(d); app.style.opacity = 1; loadedOnce = true; loading = false; if (y) window.scrollTo(0, y);   /* refresh keeps your place */
 }
 
 /* A/B test = a Shopify rollout (live theme vs the cross-sell copy). Shopify splits shoppers and counts sessions, cart
@@ -252,7 +273,7 @@ function renderAB(d) {
     <span class="sp"></span>
     <span class="seg2"><button class="${abView === 'key' ? 'on' : ''}" onclick="setAbView('key')">Key metrics</button><button class="${abView === 'all' ? 'on' : ''}" onclick="setAbView('all')">All metrics</button></span>
     <span class="pill">Range: all data (${esc(A.start)} – ${esc(A.until)})</span>
-    <span class="pill" title="Refreshes every minute while this tab is open">${A.live ? 'Live · read ' + read : 'Last night'}</span>
+    <span class="pill livepill" title="Refreshes every minute while this tab is open">${A.live ? 'Live · read ' + read : 'Last night'}</span>
     <button class="btn sm" onclick="load()">Refresh</button><button class="btn sm" onclick="exportAB()">Export all (CSV)</button></div>`;
   h += `<div class="infobar"><div class="f"><span class="k">Start date</span><span class="v">${fdate(A.start)}</span></div>
     <div class="f"><span class="k">End date</span><span class="v">${running ? '21 Dec 2026' : '—'}</span></div>
@@ -266,6 +287,28 @@ function renderAB(d) {
   if (late) h += `<div class="banner warn">${icon}<div><b>The goal was changed after the test started.</b> Treat the result with caution.</div></div>`;
   if (running && (C.orders < 30 || T.orders < 30)) h += `<div class="banner warn">${icon}<div><b>Not readable yet.</b> ${num(C.orders)} control and ${num(T.orders)} test orders so far. A verdict needs 30+ orders a side, and a lift under about 6% needs roughly 4 weeks to show — don't call this one.</div></div>`;
   if (!running) h += `<div class="banner info">${icon}<div><b>No test running.</b> Showing the last 14 days of all shoppers as the baseline to beat.</div></div>`;
+  /* what the app itself did in the Test group: tiles seen, clicked, added, and the revenue from items added from tiles */
+  if (running) {
+    const O = S.online?.jsonValue, today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), SRCN = { pick: 'Product page picks', best: 'Best sellers tabs', drawer: 'Cart drawer', near: 'Sold out: closest match', qv: 'Pop-up', okb: 'Other' };
+    const P = {}; const add = (src, k, v) => { (P[src] ||= { views: 0, clicks: 0, adds: 0, orders: 0, units: 0, rev: 0 })[k] += v || 0; };
+    for (const r of (O?.rows || [])) if (r.d >= A.start && r.d <= A.until) { add(r.src, 'views', r.views); add(r.src, 'clicks', r.clicks); add(r.src, 'adds', r.adds); if (r.d < today) { add(r.src, 'orders', r.orders); add(r.src, 'units', r.units); add(r.src, 'rev', r.rev); } }
+    for (const [src, x] of Object.entries(S.xs?.by || {})) { add(src, 'orders', x.orders); add(src, 'units', x.units); add(src, 'rev', x.rev); }
+    const X = Object.values(P).reduce((a, x) => { for (const k in x) a[k] = (a[k] || 0) + x[k]; return a; }, {});
+    const srcs = Object.keys(P).sort((a, b) => P[b].rev - P[a].rev || P[b].views - P[a].views);
+    h += `<div class="card mb"><div class="hdr"><h2>What the cross sells did</h2><span class="tiny muted">Test group only — the Control never sees them</span><span class="sp"></span><span class="tiny muted">sales: Shopify orders, live today · tiles seen / clicks / adds: GA4, updated overnight${O?.at ? ' (' + new Date(O.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}</span></div>
+      <div class="infobar" style="border:0;box-shadow:none;margin:0;border-bottom:1px solid var(--line-2);border-radius:0">
+        <div class="f"><span class="k">Cross-sell revenue</span><span class="v">${egp(X.rev)}</span></div>
+        <div class="f"><span class="k">Share of Test revenue</span><span class="v">${pct(X.rev, T.rev)}</span></div>
+        <div class="f"><span class="k">Items added from tiles, sold</span><span class="v">${num(X.units)}</span></div>
+        <div class="sp"></div>
+        <div class="f r"><span class="k">Tiles seen</span><span class="v">${num(X.views)}</span></div>
+        <div class="f r"><span class="k">Clicked</span><span class="v">${num(X.clicks)} <span class="tiny muted">${pct(X.clicks, X.views)}</span></span></div>
+        <div class="f r"><span class="k">Added to cart</span><span class="v">${num(X.adds)} <span class="tiny muted">${pct(X.adds, X.views)}</span></span></div></div>
+      <div class="tw"><table><thead><tr><th>Placement</th><th>Tiles seen</th><th>Clicks</th><th>Click rate</th><th>Adds</th><th>Orders</th><th>Units sold</th><th>Revenue</th><th style="width:22%">Share of cross-sell revenue</th></tr></thead><tbody>` +
+      (srcs.length ? srcs.map((src) => { const x = P[src]; return `<tr><td><b>${esc(SRCN[src] || src)}</b></td><td>${num(x.views)}</td><td>${num(x.clicks)}</td><td>${pct(x.clicks, x.views)}</td><td>${num(x.adds)}</td><td>${num(x.orders)}</td><td>${num(x.units)}</td><td>${egp(x.rev)}</td><td><div class="sigbar"><i style="width:${X.rev ? 100 * x.rev / X.rev : 0}%;background:var(--navy)"></i></div></td></tr>`; }).join('')
+        : '<tr><td colspan="9" class="muted">Nothing yet. Sales show as soon as an order contains an item added from a tile; tile views and clicks arrive overnight from GA4.</td></tr>') +
+      `</tbody></table></div></div>`;
+  }
   /* metric cards */
   const cardKeys = abView === 'key' ? [goal, ...['cvr', 'atc', 'aov'].filter((k) => k !== goal)].slice(0, 4) : Object.keys(GOALS);
   const tickF = (k, v) => { const g = GOALS[k]; return g.p ? (100 * v).toFixed(1) + '%' : k === 'upt' ? (+v).toFixed(1) : num(v); };
