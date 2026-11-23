@@ -194,6 +194,51 @@ function renderAB(d) {
     { label: 'Control: without', data: d.daily.map((x) => x.aov_off), borderColor: '#9aa3ae', backgroundColor: '#9aa3ae', borderDash: [5, 4], tension: .3, spanGaps: true }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => num(v) } } } } }));
 }
+function render(d) {
+  charts.forEach((c) => c.destroy()); charts = [];
+  const k = d.kpi, src = (d.sources || []).slice().sort((a, b) => b.revenue - a.revenue || b.views - a.views);
+  const g = Object.fromEntries((d.groups || []).map((x) => [x.ab, x])), on = g.on, off = g.off;
+  const card = (label, val, dl, sub, t) => `<div class="card kpi"><div class="l">${label} ${tip(t)}</div><b>${val}${dl}</b><small>${sub}</small></div>`;
+  const rpm = k.views ? k.revenue / k.views * 1000 : 0, rpmP = k.views_prev ? k.revenue_prev / k.views_prev * 1000 : 0;
+  const live = !!(on || off), none = !live || (!k.views && !k.revenue && !k.units), all = g.none || {};
+  let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Not live yet.</b> The cross-sell theme is not published, so no shopper sees it. ${k.views ? `The ${num(k.views)} tiles seen and ${num(k.clicks)} clicks below are preview tests, not customers. ` : ''}Real numbers start once the theme (or its 50/50 A/B split) is published. Baseline to beat in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV and <b>${all.upt ?? '–'}</b> items per order across ${num(k.web_orders)} web orders.</div>` : '';
+  h += '<div class="kpis">' +
+    card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of web revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
+    card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} web orders`, 'Web orders containing at least one item added from our tiles.') +
+    card('Units added', num(k.units), delta(k.units, k.units_prev), 'cross-sell items sold', 'Quantity of cross-sell lines in orders.') +
+    card('Click rate', pct(k.clicks, k.views), delta(k.views ? k.clicks / k.views : 0, k.views_prev ? k.clicks_prev / k.views_prev : 0), `${num(k.clicks)} clicks / ${num(k.views)} seen`, 'Tiles opened ÷ tiles that scrolled into view (each tile counted once per page view).') +
+    card('Add-to-cart rate', pct(k.adds, k.views), delta(k.views ? k.adds / k.views : 0, k.views_prev ? k.adds_prev / k.views_prev : 0), `${num(k.adds)} added`, 'Add to cart presses on our tiles ÷ tiles seen.') +
+    card('Revenue per 1,000 seen', egp(rpm), delta(rpm, rpmP), `${num(k.pageviews)} product pages`, 'Cross-sell revenue ÷ tiles seen × 1,000. Compares placements fairly.') +
+    '</div>';
+  h += `<div class="card"><div class="hd"><h2>Cross-sell revenue per day</h2><span>${esc(d.from)} – ${esc(d.to)} · daily</span></div>${none ? '<div class="empty">No cross-sell sales yet.</div>' : '<div class="chart"><canvas id="c1"></canvas></div>'}</div>`;
+  const F = [['Seen', k.views], ['Clicked', k.clicks], ['Added', k.adds], ['Sold', k.units]], fmax = Math.max(1, ...F.map((x) => x[1]));
+  h += '<div class="row"><div class="card"><div class="hd"><h2>By placement</h2><span>sorted by revenue</span></div><table><tr><th>Placement</th><th>Seen</th><th>Click rate</th><th>Added</th><th>Orders</th><th>Revenue</th><th>Per 1,000 seen</th></tr>' +
+    (src.length ? src.map((x) => `<tr><td>${esc(SRC[x.src] || x.src)}</td><td>${num(x.views)}</td><td>${pct(x.clicks, x.views)}</td><td>${num(x.adds)}</td><td>${num(x.orders)}</td><td>${egp(x.revenue)}</td><td>${x.views ? egp(x.revenue / x.views * 1000) : '–'}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="empty">Nothing recorded yet. Numbers start once the new theme (or its A/B split) is live.</td></tr>') +
+    '</table></div><div class="card"><div class="hd"><h2>Funnel</h2><span>all placements</span></div><div class="funnel">' +
+    F.map((x, i) => `<div><span>${x[0]}</span><em style="width:${Math.max(0.6, x[1] / fmax * 100)}%;opacity:${1 - i * 0.18}"></em><b>${num(x[1])}</b></div>`).join('') +
+    `</div><div class="note">Seen → clicked ${pct(k.clicks, k.views)} · seen → added ${pct(k.adds, k.views)} · added → sold ${pct(k.units, k.adds)}</div></div></div>`;
+  const ts = d.top_sold || [], tmax = Math.max(1, ...ts.map((x) => x.revenue)), tr = d.top_recommended || [];
+  h += '<div class="row2"><div class="card"><div class="hd"><h2>Most sold cross sells</h2><span>by revenue</span></div><table><tr><th>Product</th><th>Orders</th><th>Units</th><th>Revenue</th></tr>' +
+    (ts.length ? ts.map((x) => `<tr><td class="bar"><i style="width:${x.revenue / tmax * 100}%"></i><span>${esc(x.title)}</span></td><td>${num(x.orders)}</td><td>${num(x.units)}</td><td>${egp(x.revenue)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No cross-sell sales in this period yet.</td></tr>') +
+    '</table></div><div class="card"><div class="hd"><h2>Most recommended</h2><span>most seen tiles</span></div><table><tr><th>Product</th><th>Seen</th><th>Click rate</th><th>Add rate</th></tr>' +
+    (tr.length ? tr.map((x) => `<tr><td>${pretty(x.handle)}</td><td>${num(x.views)}</td><td>${pct(x.clicks, x.views)}</td><td>${pct(x.adds, x.views)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No tiles seen in this period yet.</td></tr>') +
+    '</table></div></div>';
+  const rc = d.recent || [];
+  h += '<div class="card" style="margin-top:14px"><div class="hd"><h2>Latest orders with cross sells</h2><span>check any sale against the order</span></div>' +
+    (rc.length ? rc.map((o) => `<div class="ord"><b>${esc(o.order)}</b> <small>${new Date(o.ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · order ${egp(o.total)}</small><br>` +
+      (o.items || []).map((it) => `${esc(it.title)} × ${it.q} <small>${egp(it.value)}</small><span class="chip">${esc(SRC[it.src] || it.src)}</span>`).join('<br>') + '</div>').join('') : '<div class="empty">No orders with cross sells in this period yet.</div>') +
+    '<div class="note">Attribution: an item counts when it was added from one of our tiles (it carries the hidden tag _okb on the order line). No time window, no view-through credit. Web orders only; refunds and cancellations are not deducted.</div></div>';
+  document.getElementById('app').innerHTML = h;
+  if (none) return;
+  const lab = d.daily.map((x) => new Date(x.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+  const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${egp(c.parsed.y)}` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => num(v) } } } };
+  charts.push(new Chart(document.getElementById('c1'), { data: { labels: lab, datasets: [
+    { type: 'bar', label: 'Cross-sell revenue', data: d.daily.map((x) => x.revenue), backgroundColor: '#426db3', borderRadius: 4, yAxisID: 'y', order: 2 },
+    { type: 'line', label: 'Share of web revenue', data: d.daily.map((x) => x.web ? +(x.revenue / x.web * 100).toFixed(2) : null), borderColor: '#e0a33a', backgroundColor: '#e0a33a', tension: .3, yAxisID: 'y2', order: 1, spanGaps: true }] },
+    options: { ...base, plugins: { ...base.plugins, tooltip: { callbacks: { label: (c) => c.dataset.yAxisID === 'y2' ? `${c.dataset.label}: ${c.parsed.y}%` : `${c.dataset.label}: ${egp(c.parsed.y)}` } } },
+      scales: { x: base.scales.x, y: { ...base.scales.y, beginAtZero: true }, y2: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { callback: (v) => v + '%' } } } } }));
+}
 /* Shops vs online, straight from Odoo (refreshed nightly by the picks job). Every rate shows x of n. */
 const CATS = ['Clothing', 'Toys', 'Baby Essentials', 'School', 'Party'];
 function renderOdoo(d) {
