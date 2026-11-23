@@ -184,29 +184,38 @@ async function liveXs(fromISO) {
   }
   return { by, lines };
 }
-async function shopifyData() {
-  const [m, A0] = await Promise.all([
-    AQ('{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } online: metafield(namespace: "okb", key: "online") { jsonValue } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }').then((x) => x.currentAppInstallation),
-    liveAB(6185).catch((e) => { console.warn('live A/B failed, using last night', e); return null; })]);
-  const A = A0 || m.ab?.jsonValue;   /* live from Shopify; last night's copy only as fallback */
-  const out = { owner: m.id, A, odoo: m.odoo, online: m.online, goal: m.goal, ses: [], dly: [], xs: null };
-  if (A) {
-    const today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), from = A.rollout && A.start === today ? A.rolloutStart : today + 'T00:00:00+02:00';
-    [out.ses, out.dly, out.xs] = await Promise.all([
-      SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
-      SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`),
-      A.rollout ? liveXs(from).catch((e) => { console.warn('live cross-sell orders failed', e); return null; }) : null]);
-  }
-  return out;
+/* Three steps so the screen is never empty or grey: 1) last night's saved numbers (one quick read), 2) live test from
+   Shopify, 3) today's cross-sell orders. Each step redraws; a failure in a later step keeps what is already on screen. */
+const META_Q = '{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } online: metafield(namespace: "okb", key: "online") { jsonValue } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }';
+async function sessionsFor(A) {
+  return Promise.all([
+    SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
+    SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
 }
-let loadedOnce = false, loading = false;
+function paint(d) {
+  const y = window.scrollY; last = d;
+  try { show(d); } catch (e) { console.error(e); document.getElementById('app').insertAdjacentHTML('afterbegin', `<div class="card msg" style="color:#c0262d">Display error: ${esc(e.message || e)} <button onclick="load()">Retry</button></div>`); }
+  document.getElementById('app').style.opacity = 1; if (y) window.scrollTo(0, y);
+}
+let loading = false;
 async function load() {
   if (loading) return; loading = true;
-  const app = document.getElementById('app'); if (!loadedOnce) app.style.opacity = .5; else document.querySelectorAll('.livepill').forEach((x) => x.textContent = 'Updating…');
-  const d = {};
-  try { d.sh = await shopifyData(); if (d.sh.odoo?.jsonValue) { d.odoo = d.sh.odoo.jsonValue; d.odoo_at = d.sh.odoo.updatedAt; } }
-  catch (e) { d.shErr = 'Could not read Shopify: ' + (e.message || e); }
-  const y = window.scrollY; last = d; show(d); app.style.opacity = 1; loadedOnce = true; loading = false; if (y) window.scrollTo(0, y);   /* refresh keeps your place */
+  document.querySelectorAll('.livepill').forEach((x) => x.textContent = 'Updating…');
+  try {
+    const m = (await AQ(META_Q)).currentAppInstallation;
+    const base = { owner: m.id, odoo: m.odoo, online: m.online, goal: m.goal, ses: last?.sh?.ses || [], dly: last?.sh?.dly || [], xs: last?.sh?.xs || null, A: last?.sh?.A || m.ab?.jsonValue };
+    const d = { sh: base }; if (m.odoo?.jsonValue) { d.odoo = m.odoo.jsonValue; d.odoo_at = m.odoo.updatedAt; }
+    if (!last) paint(d);                                                     /* step 1: instant */
+    const A = await liveAB(6185).catch((e) => { console.warn('live A/B failed', e); return null; }) || base.A;
+    if (A) { [base.ses, base.dly] = await sessionsFor(A); base.A = A; }
+    paint({ ...d, sh: { ...base } });                                        /* step 2: live test */
+    if (A?.rollout) {
+      const today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), from = A.start === today ? A.rolloutStart : today + 'T00:00:00+02:00';
+      const xs = await liveXs(from).catch((e) => { console.warn('live cross-sell orders failed', e); return null; });
+      if (xs) paint({ ...d, sh: { ...base, xs } });                          /* step 3: today's cross-sell orders */
+    }
+  } catch (e) { paint({ shErr: 'Could not read Shopify: ' + (e.message || e) }); }
+  finally { loading = false; document.getElementById('app').style.opacity = 1; }
 }
 
 /* A/B test = a Shopify rollout (live theme vs the cross-sell copy). Shopify splits shoppers and counts sessions, cart
@@ -253,7 +262,7 @@ const fdate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
 function renderAB(d) {
   charts.forEach((c) => c.destroy()); charts = [];
   const S = d.sh || {}, A = S.A, app = document.getElementById('app');
-  if (!A) { app.innerHTML = '<div class="abx"><div class="banner info">A/B numbers arrive with the nightly job.</div></div>'; return; }
+  if (!A) { app.innerHTML = `<div class="abx"><div class="banner info">${loading ? 'Loading the test from Shopify…' : 'No A/B numbers yet.'}</div></div>`; return; }
   const sesBy = Object.fromEntries(S.ses.map((r) => [String(r.rollout_treatment_id), r]));
   const G = {}; for (const [id, g] of Object.entries(A.groups)) { const r = sesBy[id] || {}; G[id] = { ...g, id, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 }; }
   const running = !!A.rollout, ids = Object.keys(G).sort((a, b) => (G[a].label === 'Test') - (G[b].label === 'Test'));
