@@ -304,7 +304,7 @@ function renderAB(d) {
     for (const [src, x] of Object.entries(S.xs?.by || {})) { add(src, 'orders', x.orders); add(src, 'units', x.units); add(src, 'rev', x.rev); }
     const X = Object.values(P).reduce((a, x) => { for (const k in x) a[k] = (a[k] || 0) + x[k]; return a; }, {});
     const srcs = Object.keys(P).sort((a, b) => P[b].rev - P[a].rev || P[b].views - P[a].views);
-    h += `<div class="card mb"><div class="hdr"><h2>What the cross sells did</h2><span class="tiny muted">Test group only — the Control never sees them</span><span class="sp"></span><span class="tiny muted">sales: Shopify orders, live today · tiles seen / clicks / adds: GA4, refreshed hourly${(O?.ga4_at || O?.at) ? ' (last ' + new Date(O.ga4_at || O.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}; GA4 itself runs a few hours behind</span></div>
+    h += `<div class="card mb"><div class="hdr"><h2>What the cross sells did</h2><span class="tiny muted">Test group only — the Control never sees them</span><span class="sp"></span><span class="tiny muted">sales: Shopify orders, live today · tiles seen / clicks / adds: GA4, refreshed every 3 hours${(O?.ga4_at || O?.at) ? ' (last ' + new Date(O.ga4_at || O.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}; GA4 itself runs a few hours behind</span></div>
       <div class="infobar" style="border:0;box-shadow:none;margin:0;border-bottom:1px solid var(--line-2);border-radius:0">
         <div class="f"><span class="k">Cross-sell revenue</span><span class="v">${egp(X.rev)}</span></div>
         <div class="f"><span class="k">Share of Test revenue</span><span class="v">${pct(X.rev, T.rev)}</span></div>
