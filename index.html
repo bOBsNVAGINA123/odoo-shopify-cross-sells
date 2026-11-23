@@ -190,7 +190,7 @@ function exportAB() {
 function exportOnline() {
   const O = last?.sh?.online?.jsonValue; if (!O) return;
   csv(`cross-sell-online-by-day_${O.start}.csv`, ['day', 'placement', 'tiles_seen', 'clicks', 'adds', 'orders', 'units', 'revenue_egp'], O.rows.map((r) => [r.d, r.src, r.views, r.clicks, r.adds, r.orders, r.units, r.rev]));
-  setTimeout(() => csv(`cross-sell-online-orders_${O.start}.csv`, ['order', 'time', 'order_total_egp', 'item', 'qty', 'item_value_egp', 'placement'], O.recent.flatMap((o) => o.items.map((it) => [o.order, o.ts, o.total, it.title, it.q, it.value, it.src]))), 400);
+  setTimeout(() => csv(`cross-sell-online-orders_${O.start}.csv`, ['order', 'time', 'order_total_egp', 'item', 'qty', 'item_value_egp', 'placement'], (O.lines || O.recent.flatMap((o) => o.items.map((it) => [o.order, o.ts, o.total, it.title, it.q, it.value, it.src])))), 400);
 }
 function renderAB(d) {
   charts.forEach((c) => c.destroy()); charts = [];
