@@ -107,8 +107,8 @@ function render(d) {
   const g = Object.fromEntries((d.groups || []).map((x) => [x.ab, x])), on = g.on, off = g.off, v = verdict(on, off);
   const card = (label, val, dl, sub, t) => `<div class="card kpi"><div class="l">${label} ${tip(t)}</div><b>${val}${dl}</b><small>${sub}</small></div>`;
   const rpm = k.views ? k.revenue / k.views * 1000 : 0, rpmP = k.views_prev ? k.revenue_prev / k.views_prev * 1000 : 0;
-  const none = !k.views && !k.revenue && !k.units, all = g.none || {};
-  let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Waiting for the first data.</b> Numbers start once the new theme (or its 50/50 A/B split) is live. Baseline to beat in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV and <b>${all.upt ?? '–'}</b> items per order across ${num(k.web_orders)} web orders.</div>` : '';
+  const live = !!(on || off), none = !live || (!k.views && !k.revenue && !k.units), all = g.none || {};
+  let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Not live yet.</b> The cross-sell theme is not published, so no shopper sees it. ${k.views ? `The ${num(k.views)} tiles seen and ${num(k.clicks)} clicks below are preview tests, not customers. ` : ''}Real numbers start once the theme (or its 50/50 A/B split) is published. Baseline to beat in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV and <b>${all.upt ?? '–'}</b> items per order across ${num(k.web_orders)} web orders.</div>` : '';
   h += '<div class="kpis">' +
     card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of web revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
     card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} web orders`, 'Web orders containing at least one item added from our tiles.') +
