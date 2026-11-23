@@ -134,17 +134,16 @@ async function load() {
 }
 
 /* A/B test = a Shopify rollout (live theme vs the cross-sell copy). Shopify splits shoppers and counts sessions, cart
-   adds, checkouts and conversions per group (read live here). Money comes from Odoo per order (GP on the 4% basis),
-   matched to the group by order number in the nightly job. ★ = the goal that decides the test. */
+   adds, checkouts and conversions per group (read live here); order value, units and categories per group come from
+   Shopify sales per order (nightly job). Gross profit is analysed off-line from the export. ★ = the goal that decides the test. */
 const GOALS = {
-  gp_session: { lab: 'Gross profit per session', ps: (x) => [x.gp, x.gp2, x.sessions], f: (v) => 'EGP ' + (+v).toFixed(2), est: 1, tip: 'Odoo gross profit (4% basis) of the group\'s orders ÷ its sessions. The money the test is really about.' },
-  rps: { lab: 'Revenue per session', ps: (x) => [x.rev, x.rev2, x.sessions], f: (v) => 'EGP ' + (+v).toFixed(2), est: 1, tip: 'Order revenue (Odoo, VAT in) ÷ sessions.' },
+  rps: { lab: 'Revenue per session', ps: (x) => [x.rev, x.rev2, x.sessions], f: (v) => 'EGP ' + (+v).toFixed(2), est: 1, tip: 'Order value at checkout (Shopify, incl. delivery) ÷ sessions. Catches both more orders and bigger orders.' },
   cvr: { lab: 'Conversion rate', p: (x) => [x.conv, x.sessions], tip: 'Sessions that completed checkout ÷ sessions (Shopify).' },
   atc: { lab: 'Add-to-cart rate', p: (x) => [x.atc, x.sessions], tip: 'Sessions with an add to cart ÷ sessions (Shopify).' },
   checkout: { lab: 'Checkout rate', p: (x) => [x.co, x.sessions], tip: 'Sessions that reached checkout ÷ sessions (Shopify).' },
   aov_capped: { lab: 'AOV, big orders capped', m: (x, c) => [x.rev_c, x.rev_c2, x.orders], f: egp, tip: 'Average order value with orders above the cap counted at the cap, so one huge order cannot decide the test.' },
-  aov: { lab: 'AOV', m: (x) => [x.rev, x.rev2, x.orders], f: egp, tip: 'Average order value (Odoo, VAT in).' },
-  upt: { lab: 'Items per order', m: (x) => [x.units, x.units2, x.orders], f: (v) => (+v).toFixed(2), tip: 'Units per order (UPT), shipping and gift wrap left out.' },
+  aov: { lab: 'AOV', m: (x) => [x.rev, x.rev2, x.orders], f: egp, tip: 'Average order value at checkout (Shopify, incl. delivery).' },
+  upt: { lab: 'Items per order', m: (x) => [x.units, x.units2, x.orders], f: (v) => (+v).toFixed(2), tip: 'Units per order (UPT), delivery left out.' },
   multi: { lab: 'Orders with 2+ categories', p: (x) => [x.multi, x.orders], tip: 'Share of orders with items from at least two categories.' },
   cloth_toy: { lab: 'Clothing orders with a toy', p: (x) => [x.cloth_toy, x.cloth], tip: 'Of orders with clothing, the share that also have a toy.' },
 };
@@ -174,6 +173,25 @@ let detail = null;
 const showDetail = (k) => { detail = detail === k ? null : k; if (last) renderAB(last); };
 const CAT_COL = { Clothing: '#303030', Toys: '#8a8a8a', 'Baby Essentials': '#b5b5b5', School: '#d4d4d4', Party: '#616161' };
 const TEST_C = '#303030', CTRL_C = '#b5b5b5';
+function csv(name, head, rows) {
+  const q = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const blob = new Blob(['﻿' + [head, ...rows].map((r) => r.map(q).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function exportAB() {
+  const A = last?.sh?.A; if (!A) return; const sesBy = Object.fromEntries(last.sh.ses.map((r) => [String(r.rollout_treatment_id), r]));
+  const lab = (id) => A.groups[id]?.label || id, tag = `${A.start}_${A.until}`;
+  csv(`cross-sell-ab-orders_${tag}.csv`, ['order', 'group', 'order_value_egp', 'units', 'categories'], (A.orders || []).map((o) => [o[0], lab(o[1]), o[2], o[3], o[4]]));
+  setTimeout(() => csv(`cross-sell-ab-metrics_${tag}.csv`, ['group', 'metric', 'value'], Object.entries(A.groups).flatMap(([id, g]) => { const r = sesBy[id] || {};
+    const x = { ...g, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 };
+    return [['sessions', x.sessions], ['added_to_cart', x.atc], ['reached_checkout', x.co], ['completed_checkout', x.conv], ['orders', x.orders], ['revenue_egp', x.rev], ['units', x.units], ['orders_2plus_categories', x.multi], ['clothing_orders', x.cloth], ['clothing_orders_with_toy', x.cloth_toy],
+      ...Object.entries(x.mix || {}).map(([c, v]) => ['revenue_' + c.toLowerCase().replace(/\W+/g, '_'), v])].map(([m, v]) => [g.label, m, v]); })), 400);
+}
+function exportOnline() {
+  const O = last?.sh?.online?.jsonValue; if (!O) return;
+  csv(`cross-sell-online-by-day_${O.start}.csv`, ['day', 'placement', 'tiles_seen', 'clicks', 'adds', 'orders', 'units', 'revenue_egp'], O.rows.map((r) => [r.d, r.src, r.views, r.clicks, r.adds, r.orders, r.units, r.rev]));
+  setTimeout(() => csv(`cross-sell-online-orders_${O.start}.csv`, ['order', 'time', 'order_total_egp', 'item', 'qty', 'item_value_egp', 'placement'], O.recent.flatMap((o) => o.items.map((it) => [o.order, o.ts, o.total, it.title, it.q, it.value, it.src]))), 400);
+}
 function renderAB(d) {
   charts.forEach((c) => c.destroy()); charts = [];
   const S = d.sh || {}, A = S.A, app = document.getElementById('app');
@@ -183,7 +201,7 @@ function renderAB(d) {
   const running = !!A.rollout, ids = Object.keys(G).sort((a, b) => (G[a].label === 'Test') - (G[b].label === 'Test'));
   const C = running ? G[ids.find((i) => G[i].label === 'Control')] : null, T = running ? G[ids.find((i) => G[i].label === 'Test')] : null;
   const cols = running ? [[C, 'Control', 'Without cross sells', CTRL_C], [T, 'Test', 'With cross sells', TEST_C]] : [[G[ids[0]], 'All shoppers', 'All shoppers', TEST_C]];
-  const goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'gp_session';
+  const goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'rps';
   const nDays = Math.max(1, Math.round((new Date(A.until) - new Date(A.start)) / 864e5) + 1), sesDay = ids.reduce((a, i) => a + G[i].sessions, 0) / nDays;
   const late = running && S.goal?.updatedAt && new Date(S.goal.updatedAt) > new Date(A.start + 'T00:00:00+02:00');
   const srm = running && C && T && (C.sessions + T.sessions) ? (() => { const n = C.sessions + T.sessions, e = T.split / 100, z = (T.sessions - n * e) / Math.sqrt(n * e * (1 - e)); return Math.abs(z) > 3 ? `Split is off: ${pct(T.sessions, n)} of sessions in Test, ${T.split}% planned. Check the test in Shopify before trusting it.` : ''; })() : '';
@@ -197,7 +215,7 @@ function renderAB(d) {
     : cg.lo > 0 ? `Cross sells win on ${GOALS[goal].lab.toLowerCase()}: ${lift(cg)} (95% range +${cg.lo.toFixed(1)}% to +${cg.hi.toFixed(1)}%), after ${nDays} days.`
     : cg.hi < 0 ? `Cross sells lose on ${GOALS[goal].lab.toLowerCase()}: ${lift(cg)} (95% range ${cg.lo.toFixed(1)}% to ${cg.hi.toFixed(1)}%), after ${nDays} days.`
     : `No clear difference yet on ${GOALS[goal].lab.toLowerCase()}: ${lift(cg)}, range ${cg.lo.toFixed(1)}% to +${cg.hi.toFixed(1)}% includes 0. ${num(C.orders + T.orders)} orders in ${nDays} days.`;
-  let h = `<div class="abhead"><div><b>${running ? esc(A.rollout.name) : 'Cross sells vs none'}</b> <span class="badge ${running ? 'b-win' : 'b-wait'}">${running ? esc(A.rollout.status.toLowerCase()) : 'not running'}</span></div><div class="reading">${reading}</div>` +
+  let h = `<div class="abhead"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><b>${running ? esc(A.rollout.name) : 'Cross sells vs none'}</b> <span class="badge ${running ? 'b-win' : 'b-wait'}">${running ? esc(A.rollout.status.toLowerCase()) : 'not running'}</span></div><button class="mk" onclick="exportAB()">Export all (CSV)</button></div><div class="reading">${reading}</div>` +
     (srm ? `<div class="alert">${esc(srm)}</div>` : '') + (late ? '<div class="alert">The goal was changed after the test started: treat the result with caution.</div>' : '') + '</div>';
   /* KPI tiles: goal + the three that explain it */
   const kp = [goal, ...['cvr', 'atc', 'aov'].filter((k) => k !== goal)].slice(0, 4);
@@ -225,10 +243,10 @@ function renderAB(d) {
         (running ? `<td class="${heat}">${lift(c)}</td><td class="${heat}">${c ? `${c.lo >= 0 ? '+' : ''}${c.lo.toFixed(1)}% to ${c.hi >= 0 ? '+' : ''}${c.hi.toFixed(1)}%` : '–'}</td><td class="${heat}">${c ? chance(c.pBeat) : '–'}</td>` : '') +
         `<td>${k === goal ? '<span class="muted">goal</span>' : `<button class="mk" onclick="event.stopPropagation();setGoal('${k}')">Make goal</button>`}</td></tr>`;
       if (detail === k) { const rs = cols.map(([x]) => val(k, x)), ci = rs.map((r) => r ? [r.v - 1.96 * r.se, r.v + 1.96 * r.se] : [0, 0]), lo = Math.min(...ci.map((x) => x[0])), hi = Math.max(...ci.map((x) => x[1])), sp = (hi - lo) || 1;
-        row += `<tr class="dt"><td colspan="${running ? 7 : 4}">${cols.map(([x, s, , col], i) => rs[i] ? `<div class="civ"><span class="cl">${s}</span><span>${rs[i].f(ci[i][0])}</span><div class="citrack"><i style="left:${(ci[i][0] - lo) / sp * 100}%;width:${(ci[i][1] - ci[i][0]) / sp * 100}%;background:${col};opacity:.35"></i><b style="left:${(rs[i].v - lo) / sp * 100}%;background:${col}"></b></div><span>${rs[i].f(ci[i][1])}</span></div>` : '').join('')}<div class="sub1">${esc(GOALS[k].tip)}${c && GOALS[k].est ? ` If every shopper saw cross sells: ${c.d >= 0 ? '+' : '−'}${egp(Math.abs(c.d * sesDay * 30))} a month.` : ''}</div></td></tr>`; }
+        row += `<tr class="dt"><td colspan="${running ? 7 : 4}">${cols.map(([x, s, , col], i) => rs[i] ? `<div class="civ"><span class="cl">${s}</span><span>${rs[i].f(ci[i][0])}</span><div class="citrack"><i style="left:${(ci[i][0] - lo) / sp * 100}%;width:${(ci[i][1] - ci[i][0]) / sp * 100}%;background:${col};opacity:.35"></i><b style="left:${(rs[i].v - lo) / sp * 100}%;background:${col}"></b></div><span>${rs[i].f(ci[i][1])}</span></div>` : '').join('')}<div class="sub1">${esc(GOALS[k].tip)}${c && GOALS[k].est ? ` If every shopper saw cross sells: ${c.d >= 0 ? '+' : '−'}${egp(Math.abs(c.d * sesDay * 30))} revenue a month.` : ''}</div></td></tr>`; }
       return row; }).join('') + '</table></div>';
   h += `<div class="card" style="margin-top:14px"><div class="hd"><h2>Conversion rate per day</h2><span>${running ? 'control vs test' : 'all shoppers'}</span></div><div class="chart"><canvas id="c2"></canvas></div></div>`;
-  h += `<details class="how"><summary>How this is worked out</summary><p>Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts sessions, cart adds, checkouts and conversions for each group. Orders, revenue and gross profit come from Odoo, matched to the group by order number (${cols.map(([x, s]) => `${s}: ${num(x.orders)} of ${num(x.shopify_orders)} Shopify orders found`).join('; ')}). GP = order total × 0.96 − (untaxed total − Odoo margin), the 4% basis. Capped AOV counts orders above ${egp(A.cap || 6185)} (top 1% of web orders, 2–22 Nov, fixed before any test) at the cap. Online store checkouts only; staff draft orders never pass checkout. 95% ranges come from each group's own spread; a range that includes 0 is not a result, and a lift under about 6% needs roughly 4 weeks to show. Odoo numbers as of ${new Date(A.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</p></details>`;
+  h += `<details class="how"><summary>How this is worked out</summary><p>Everything is Shopify. Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts sessions, cart adds, checkouts and conversions for each group. Orders, order value, units and categories (product type) come from Shopify sales per order: only orders placed in the window, valued at checkout incl. delivery; returns processed later are left out. Capped AOV counts orders above ${egp(A.cap || 6185)} (top 1% of web orders, 2–22 Nov, fixed before any test) at the cap. Online store checkouts only. 95% ranges come from each group's own spread; a range that includes 0 is not a result, and a lift under about 6% needs roughly 4 weeks to show. Gross profit is not in the tool: export the orders and it is worked out from Odoo. Numbers as of ${new Date(A.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</p></details>`;
   app.innerHTML = h;
   const days_ = [...new Set(S.dly.map((r) => r.day))].sort(), lab = days_.map((x) => new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
   const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
@@ -263,6 +281,7 @@ function render(d0) {
   const live = d.live, none = !live || (!k.views && !k.revenue && !k.units);
   let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Not live yet.</b> No shopper sees the cross sells until the test (or the theme) goes live. Baseline in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV across ${num(k.web_orders)} web orders.</div>` : '';
   if (!d.ga4) h += '<div class="card" style="margin-bottom:14px;background:#fff4d6;box-shadow:none">Tile views and clicks are not connected yet (GA4 key missing in the nightly job). Sales below are complete.</div>';
+  h += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="mk" onclick="exportOnline()">Export all (CSV)</button></div>';
   h += '<div class="kpis">' +
     card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of web revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
     card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} web orders`, 'Web orders containing at least one item added from our tiles.') +
