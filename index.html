@@ -117,9 +117,42 @@ async function SQ(q) {
   const cols = t.tableData.columns.map((c) => c.name);
   return t.tableData.rows.map((r) => Array.isArray(r) ? Object.fromEntries(cols.map((c, i) => [c, r[i]])) : r);
 }
+/* The A/B test, live from Shopify on every open: the running theme test (rollout), and per group the orders placed since it
+   started (value at checkout incl. delivery, units, product types). Same rules as the nightly job. */
+const TEST_THEME = /basket builders/i;
+async function liveAB(cap) {
+  const ro = (await AQ(`{ rollouts(first: 25) { nodes { id name status startedAt concludedAt treatments { id split
+      changes(first: 5) { nodes { __typename ... on RolloutThemePublishChange { theme { id name } } } } } } } }`)).rollouts.nodes
+    .filter((r) => r.startedAt && r.treatments.some((t) => t.changes.nodes.some((c) => c.__typename === 'RolloutThemePublishChange')));
+  const r = ro.sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  const cairo = (iso) => new Date(Date.parse(iso) + 2 * 3600e3).toISOString().slice(0, 10), today = cairo(new Date().toISOString());
+  const groups = {}; let start, until;
+  if (!r) { until = new Date(Date.parse(today) - 864e5).toISOString().slice(0, 10); start = new Date(Date.parse(until) - 13 * 864e5).toISOString().slice(0, 10); groups['0'] = { label: 'Now', theme: 'live theme, no test running', split: 100 }; }
+  else {
+    start = cairo(r.startedAt); until = r.concludedAt ? cairo(r.concludedAt) : today;
+    const th = r.treatments.map((t) => ({ id: t.id.split('/').pop(), split: t.split, theme: t.changes.nodes.find((c) => c.theme)?.theme }));
+    const test = th.find((t) => t.theme && (TEST_THEME.test(t.theme.name) || t.theme.id.endsWith('/156358639795'))) || th.find((t) => t.theme) || th[1];
+    for (const t of th) groups[t.id] = { label: t === test ? 'Test' : 'Control', theme: t.theme ? t.theme.name : 'current live theme', split: t.split };
+  }
+  const rows = await SQ(`FROM sales SHOW orders, total_sales, quantity_ordered GROUP BY order_name, rollout_treatment_id, product_type WHERE sales_channel = 'Online Store' SINCE ${start} UNTIL ${until} LIMIT 100000`);
+  const po = {};
+  for (const x of rows) { const g = String(x.rollout_treatment_id); if (!groups[g]) continue;
+    const o = po[x.order_name] ||= { g, placed: false, rev: 0, units: 0, cats: {} }, v = +x.total_sales || 0, q = Math.round(+x.quantity_ordered || 0);
+    if (+x.orders > 0) o.placed = true; if (v > 0) o.rev += v; if (q > 0) { o.units += q; if (x.product_type) o.cats[x.product_type] = (o.cats[x.product_type] || 0) + Math.max(v, 0); } }
+  const G = Object.fromEntries(Object.entries(groups).map(([id, m]) => [id, { ...m, orders: 0, rev: 0, rev2: 0, rev_c: 0, rev_c2: 0, units: 0, units2: 0, multi: 0, cloth: 0, cloth_toy: 0, mix: {} }]));
+  const orders = [];
+  for (const [name, o] of Object.entries(po)) { if (!o.placed) continue; const g = G[o.g], v = o.rev, rc = Math.min(v, cap), cats = Object.keys(o.cats);
+    g.orders++; g.rev += v; g.rev2 += v * v; g.rev_c += rc; g.rev_c2 += rc * rc; g.units += o.units; g.units2 += o.units ** 2;
+    for (const c of cats) g.mix[c] = (g.mix[c] || 0) + o.cats[c];
+    if (cats.length >= 2) g.multi++; if (o.cats.Clothing != null) { g.cloth++; if (o.cats.Toys != null) g.cloth_toy++; }
+    orders.push([name, o.g, Math.round(v * 100) / 100, o.units, cats.sort().join('|')]); }
+  return { rollout: r ? { id: r.id, name: r.name, status: r.status } : null, start, until, groups: G, orders, at: new Date().toISOString(), cap, live: true };
+}
 async function shopifyData() {
   const m = (await AQ('{ currentAppInstallation { id ab: metafield(namespace: "okb", key: "ab") { jsonValue } odoo: metafield(namespace: "okb", key: "odoo") { jsonValue updatedAt } online: metafield(namespace: "okb", key: "online") { jsonValue } goal: metafield(namespace: "okb", key: "goal") { value updatedAt } } }')).currentAppInstallation;
-  const A = m.ab?.jsonValue, out = { owner: m.id, A, odoo: m.odoo, online: m.online, goal: m.goal, ses: [], dly: [] };
+  let A = m.ab?.jsonValue;
+  try { A = await liveAB(A?.cap || 6185); } catch (e) { console.warn('live A/B failed, using last night', e); }   /* live from Shopify; last night's copy only as fallback */
+  const out = { owner: m.id, A, odoo: m.odoo, online: m.online, goal: m.goal, ses: [], dly: [] };
   if (A) [out.ses, out.dly] = await Promise.all([
     SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
     SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
@@ -246,7 +279,7 @@ function renderAB(d) {
         row += `<tr class="dt"><td colspan="${running ? 7 : 4}">${cols.map(([x, s, , col], i) => rs[i] ? `<div class="civ"><span class="cl">${s}</span><span>${rs[i].f(ci[i][0])}</span><div class="citrack"><i style="left:${(ci[i][0] - lo) / sp * 100}%;width:${(ci[i][1] - ci[i][0]) / sp * 100}%;background:${col};opacity:.35"></i><b style="left:${(rs[i].v - lo) / sp * 100}%;background:${col}"></b></div><span>${rs[i].f(ci[i][1])}</span></div>` : '').join('')}<div class="sub1">${esc(GOALS[k].tip)}${c && GOALS[k].est ? ` If every shopper saw cross sells: ${c.d >= 0 ? '+' : '−'}${egp(Math.abs(c.d * sesDay * 30))} revenue a month.` : ''}</div></td></tr>`; }
       return row; }).join('') + '</table></div>';
   h += `<div class="card" style="margin-top:14px"><div class="hd"><h2>Conversion rate per day</h2><span>${running ? 'control vs test' : 'all shoppers'}</span></div><div class="chart"><canvas id="c2"></canvas></div></div>`;
-  h += `<details class="how"><summary>How this is worked out</summary><p>Everything is Shopify. Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts sessions, cart adds, checkouts and conversions for each group. Orders, order value, units and categories (product type) come from Shopify sales per order: only orders placed in the window, valued at checkout incl. delivery; returns processed later are left out. Capped AOV counts orders above ${egp(A.cap || 6185)} (top 1% of web orders, 2–22 Nov, fixed before any test) at the cap. Online store checkouts only. 95% ranges come from each group's own spread; a range that includes 0 is not a result, and a lift under about 6% needs roughly 4 weeks to show. Gross profit is not in the tool: export the orders and it is worked out from Odoo. Numbers as of ${new Date(A.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</p></details>`;
+  h += `<details class="how"><summary>How this is worked out</summary><p>Everything is Shopify. Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts sessions, cart adds, checkouts and conversions for each group. Orders, order value, units and categories (product type) come from Shopify sales per order: only orders placed in the window, valued at checkout incl. delivery; returns processed later are left out. Capped AOV counts orders above ${egp(A.cap || 6185)} (top 1% of web orders, 2–22 Nov, fixed before any test) at the cap. Online store checkouts only. 95% ranges come from each group's own spread; a range that includes 0 is not a result, and a lift under about 6% needs roughly 4 weeks to show. Gross profit is not in the tool: export the orders and it is worked out from Odoo. ${A.live ? 'Live from Shopify, read' : 'From the nightly job,'} ${new Date(A.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}; Shopify reports lag a few minutes.</p></details>`;
   app.innerHTML = h;
   const days_ = [...new Set(S.dly.map((r) => r.day))].sort(), lab = days_.map((x) => new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
   const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
