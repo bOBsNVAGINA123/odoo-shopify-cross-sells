@@ -194,7 +194,7 @@ async function sessionsFor(A) {
 }
 function paint(d) {
   const y = window.scrollY; last = d;
-  try { show(d); } catch (e) { console.error(e); document.getElementById('app').insertAdjacentHTML('afterbegin', `<div class="card msg" style="color:#c0262d">Display error: ${esc(e.message || e)} <button onclick="load()">Retry</button></div>`); }
+  try { show(d); } catch (e) { console.error(e); document.getElementById('app').innerHTML = `<div class="card msg" style="color:#c0262d">Display error: ${esc(e.message || e)} <button onclick="load()">Retry</button></div>`; }
   document.getElementById('app').style.opacity = 1; if (y) window.scrollTo(0, y);
 }
 let loading = false;
@@ -363,6 +363,23 @@ function renderAB(d) {
   const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
   charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: lab, datasets: arms.map(([x, s, , cls]) => ({ label: s, data: series(x.id), borderColor: cls === 'v' ? '#1E2A5A' : '#5B8DEF', backgroundColor: cls === 'v' ? '#1E2A5A' : '#5B8DEF', tension: .3, spanGaps: true, pointRadius: 3 })) },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (+v).toFixed(2) + '%' } } } } }));
+}
+/* Online tab data = app field okb.online (nightly job: Shopify orders tagged _okb + GA4 tile events), cut to the chosen window. */
+function onlineData(d) {
+  const O = d.sh?.online?.jsonValue; if (!O) return null;
+  const today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), back = (n) => new Date(Date.parse(today) - n * 864e5).toISOString().slice(0, 10);
+  const from = back(days - 1), pf = back(2 * days - 1), inW = (x) => x >= from && x <= today, inP = (x) => x >= pf && x < from;
+  const sum = (rows, f, key) => rows.filter((r) => f(r.d)).reduce((a, r) => a + (r[key] || 0), 0);
+  const prevOk = pf >= O.start, k = {};
+  for (const key of ['views', 'clicks', 'adds', 'orders', 'units']) { k[key] = sum(O.rows, inW, key); k[key + '_prev'] = prevOk ? sum(O.rows, inP, key) : 0; }
+  k.revenue = sum(O.rows, inW, 'rev'); k.revenue_prev = prevOk ? sum(O.rows, inP, 'rev') : 0;
+  k.web_revenue = sum(O.days, inW, 'web_rev'); k.web_orders = sum(O.days, inW, 'web_orders');
+  const srcs = [...new Set(O.rows.map((r) => r.src))];
+  const sources = srcs.map((src) => { const rr = O.rows.filter((r) => r.src === src && inW(r.d)); return { src, views: rr.reduce((a, r) => a + r.views, 0), clicks: rr.reduce((a, r) => a + r.clicks, 0), adds: rr.reduce((a, r) => a + r.adds, 0), orders: rr.reduce((a, r) => a + r.orders, 0), units: rr.reduce((a, r) => a + r.units, 0), revenue: rr.reduce((a, r) => a + r.rev, 0) }; });
+  const daily = O.days.filter((x) => inW(x.d)).map((x) => ({ day: x.d, web: x.web_rev, revenue: O.rows.filter((r) => r.d === x.d).reduce((a, r) => a + r.rev, 0) }));
+  const t = O.tops[String(days)] || O.tops['60'];
+  return { kpi: k, sources, daily, from, to: today, top_sold: t.sold, top_recommended: t.seen, recent: O.recent.filter((r) => r.ts.slice(0, 10) >= from),
+    ga4: O.ga4, live: !!d.sh?.A?.rollout || k.orders > 0, at: O.at };
 }
 function render(d0) {
   charts.forEach((c) => c.destroy()); charts = [];
