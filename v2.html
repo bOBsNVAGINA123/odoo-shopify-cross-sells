@@ -362,10 +362,10 @@ function pgPlacements(d, app) {
   const ords = {}; for (const l of lines) { const o = ords[l[0]] ||= { name: l[0], ts: l[1], total: l[2], items: [] }; o.items.push(l); }
   const recent = Object.values(ords).sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 15);
   withPhotos([...top.map((x) => x.title), ...seen.map((x) => x.handle), ...recent.flatMap((o) => o.items.map((l) => l[3])), ...all.lines.map((l) => l[3])]);
-  const pname = place ? (PLACE[place]?.[0] || place) : 'All placements';
+  const pname = place ? `Showing only ${PLACE[place]?.[0] || place}` : 'Showing all 4 placements together';
   let h = header('Cross sells', `${esc(pname)} · since the test started ${dshort(from)}`, `<s-button href="${PREVIEW}" target="_blank">View on store</s-button><s-button onclick="exportOnline()">Export</s-button>`) + nav();
   h += '<div class="g5">' + [null, ...Object.keys(PLACE).filter((s) => P[s] || ['pick', 'best', 'drawer', 'near'].includes(s)).slice(0, 4)].map((s) => { const x = s ? (P[s] || { views: 0, clicks: 0, adds: 0, ord: 0, rev: 0 }) : { ...all.X, ord: all.X.orders };
-    return `<div class="tile pick${place === s ? ' on' : ''}" onclick="drill(${s ? `'${s}'` : 'null'})"><b>${s ? PLACE[s][0] : 'All placements'}</b>
+    return `<div class="tile pick${place === s ? ' on' : ''}" onclick="drill(${s ? `'${s}'` : 'null'})"><b>${s ? PLACE[s][0] : 'Total, all 4 together'}</b>${s ? '' : '<div class="ts">click a box to see only that one</div>'}
       <div class="tv">${egp(x.rev)}</div><div class="ts">${pct(x.rev, all.X.rev)} of cross-sell revenue</div><div class="ts">${num(x.ord)} orders${T ? ` · ${pct(x.ord, T.orders)} attach` : ''} · ${pct(x.adds, x.views, 2)} take</div></div>`; }).join('') + '</div>';
   h += card(place ? 'What shoppers see' : 'What shoppers see in B', place && SHOT[place] ? `<div class="shots one">${shotCard(place)}</div>` : `<div class="shots">${['pick', 'best', 'drawer', 'near'].map(shotCard).join('')}</div>`, '<s-text tone="subdued">the Control group sees none of these</s-text>');
   h += `<div class="g4">${tile('Tiles seen', num(X.views), `${pct(X.views, all.X.views)} of all tiles seen`)}${tile('Click rate', pct(X.clicks, X.views), `tiles clicked ÷ tiles seen · ${num(X.clicks)} clicks`)}${tile('Take rate', pct(X.adds, X.views, 2), `tiles added to cart ÷ tiles seen · ${num(X.adds)} added`)}${tile('Attach rate', T ? pct(X.orders, T.orders) : '–', T ? `B orders with a cross-sell item · ${num(X.orders)} of ${num(T.orders)}` : '')}</div>`;
