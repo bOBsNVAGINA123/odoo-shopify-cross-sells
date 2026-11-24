@@ -8,98 +8,50 @@
      a valid Shopify session token for this app (client id below). -->
 <meta name="shopify-api-key" content="2062428c9eafbbf40a2b212ee890bb81">
 <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+<script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  :root{--ink:#303030;--muted:#616161;--soft:#8a8a8a;--line:#ebebeb;--bg:#f1f1f1;--card:#fff;--blue:#426db3;--blue2:#9db4dc;--grey:#d9dde3;--good:#0a7d42;--bad:#b42318;--warn:#8a5a00}
-  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif}
-  main{max-width:1180px;margin:0 auto;padding:20px 16px 48px}
-  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-  h1{font-size:20px;margin:0}h1+p{margin:2px 0 0;color:var(--muted)}h2{font-size:14px;margin:0}
-  .seg{display:inline-flex;background:#fff;border-radius:10px;box-shadow:0 0 0 1px #d4d4d4;overflow:hidden}
-  .seg button{font:inherit;border:0;background:none;padding:7px 12px;cursor:pointer;color:var(--ink)}.seg button.on{background:#303030;color:#fff}
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:14px}
-  .card{background:var(--card);border-radius:12px;box-shadow:0 1px 0 rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05);padding:16px;min-width:0}
-  .kpi .l{color:var(--muted);font-size:12.5px;display:flex;gap:4px;align-items:center}.kpi b{display:block;font-size:21px;margin:4px 0 2px;letter-spacing:-.01em;white-space:nowrap}.kpi b .d{display:inline-block}
-  .kpi small{color:var(--soft);font-size:12px}.d{font-size:12px;font-weight:600;margin-left:6px}.d.up{color:var(--good)}.d.down{color:var(--bad)}.d.flat{color:var(--soft)}
-  .i{display:inline-flex;width:15px;height:15px;border-radius:50%;border:1px solid #c4c4c4;color:#8a8a8a;font-size:10px;align-items:center;justify-content:center;cursor:help}
-  .hd{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px}.hd span{color:var(--soft);font-size:12px}
-  .row{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
-  @media(max-width:880px){.row,.row2{grid-template-columns:1fr}}
-  .chart{position:relative;height:260px}
-  table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-  th:first-child,td:first-child{text-align:left;white-space:normal}th{color:var(--muted);font-weight:600;font-size:12px}tr:last-child td{border-bottom:0}
-  .bar{position:relative}.bar i{position:absolute;inset:4px auto 4px 0;background:rgba(66,109,179,.14);border-radius:4px;z-index:0}.bar span{position:relative}
-  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
-  .b-wait{background:#fff4d6;color:var(--warn)}.b-win{background:#dff5e7;color:var(--good)}.b-lose{background:#fde7e6;color:var(--bad)}.b-flat{background:#eef0f3;color:var(--muted)}
-  .funnel div{display:grid;grid-template-columns:90px 1fr 70px;gap:10px;align-items:center;margin:8px 0}.funnel em{display:block;height:26px;border-radius:6px;background:var(--blue);min-width:3px}
-  .funnel span{color:var(--muted)}.funnel b{text-align:right}
-  .note{color:var(--soft);font-size:12px;margin-top:10px}.empty{padding:26px;text-align:center;color:var(--soft)}
-  .ord{border-bottom:1px solid var(--line);padding:9px 0}.ord:last-child{border:0}.ord b{font-weight:600}.ord small{color:var(--soft)}
-  .chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#eef3fb;color:#2c5281;margin-left:6px}
-  .msg{padding:40px;text-align:center;color:var(--muted)}
-  .cmp{display:grid;grid-template-columns:48px 1fr auto;gap:8px;align-items:center;margin:6px 0}.cmp span{color:var(--soft);font-size:12px}.cmp i{height:10px;border-radius:5px;background:#9aa3ae}.cmp.on i{background:var(--blue)}.cmp b{font-size:15px}
-  .chip.off{background:#f1f1f1;color:var(--soft)}td small{color:var(--soft)}.l2 td:nth-child(2),.l2 th:nth-child(2){text-align:left}.kpi .d{margin-left:0}
-  .card{overflow-x:auto}@media(max-width:600px){.kpi b{font-size:18px;white-space:normal}.kpi b .d{display:block;margin:2px 0 0}.kpis{gap:8px}}
-  .tw{overflow-x:auto}
-  /* A/B tab: the Ourkids AB Testing app's results look (its tokens and components), scoped to .abx */
-  .abx{--indigo:#4F46E5;--indigo-50:#EEF0FE;--indigo-100:#E0E3FC;--navy:#1E2A5A;--blue:#5B8DEF;--line:#E6E8F0;--line-2:#F0F1F6;--text:#14172B;--muted:#6B7189;--faint:#9AA0B5;--green:#0E9F6E;--red:#E02424;--amber:#B45309;--amber-bg:#FEF3C7;--red-bg:#FDECEC;--grey-pill:#F2F3F7;--r:10px;--r-sm:7px;--sh:0 1px 2px rgba(20,23,43,.05);color:var(--text);font-size:14px}
-  .abx .row{display:flex;gap:10px;align-items:center}.abx .sp{flex:1}.abx .mb{margin-bottom:16px}.abx .tiny{font-size:12px}.abx .muted{color:var(--muted)}.abx .up{color:var(--green);font-weight:600}.abx .dn{color:var(--red);font-weight:600}
-  .abx h2{font-size:16px;font-weight:650;margin:0}.abx h3{font-size:13.5px;font-weight:650;margin:0}
-  .abx .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:var(--r-sm);padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--sh);white-space:nowrap;color:var(--text)}.abx .btn.sm{padding:4.5px 9px;font-size:12.5px}.abx .btn.gho{border:none;box-shadow:none;background:transparent;color:var(--muted)}
-  .abx .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:20px;background:var(--grey-pill);color:#4B5169}.abx .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}.abx .pill.s-gather .dot{background:var(--green)}.abx .pill.s-pending .dot{background:#9AA0B5}.abx .pill.s-paused .dot{background:var(--amber)}
-  .abx .seg2{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:#fff}.abx .seg2 button{border:0;background:#fff;padding:5px 10px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--muted)}.abx .seg2 button.on{background:var(--navy);color:#fff}
-  .abx .card{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}.abx .card .bd{padding:16px}.abx .card .hdr{padding:13px 16px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .abx table{width:100%;border-collapse:collapse}.abx th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:650;padding:10px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap}.abx td{padding:12px 14px;border-bottom:1px solid var(--line-2);font-size:13px;vertical-align:middle;text-align:left;white-space:nowrap}.abx tbody tr:last-child td{border-bottom:none}
-  .abx .chipG{width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;color:#fff;background:var(--blue)}.abx .chipG.g1{background:var(--navy)}
-  .abx .infobar{display:flex;flex-wrap:wrap;gap:22px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:13px 16px;box-shadow:var(--sh);margin-bottom:16px}.abx .infobar .f{display:flex;flex-direction:column;gap:2px}.abx .infobar .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:650}.abx .infobar .v{font-size:13.5px;font-weight:650}.abx .infobar .r{text-align:right}
-  .abx .banner{display:flex;gap:10px;padding:12px 14px;border-radius:var(--r);font-size:13px;margin-bottom:16px;align-items:flex-start}.abx .banner.info{background:var(--indigo-50);color:#312E81}.abx .banner.warn{background:var(--amber-bg);color:#78350F}.abx .banner.err{background:var(--red-bg);color:#991B1B}.abx .banner svg{flex:none;margin-top:1px}
-  .abx .kmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:14px}.abx .km{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:var(--sh);cursor:pointer}.abx .km:hover{border-color:var(--indigo)}.abx .km.on{border-color:var(--indigo);box-shadow:0 0 0 2px var(--indigo-50)}
-  .abx .km .t{display:flex;align-items:center;gap:6px;font-weight:650;font-size:13.5px;min-height:26px}.abx .km .star{color:#F2B824}
-  .abx .upl{display:inline-flex;align-items:baseline;gap:5px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:3px 11px;margin:9px 0 6px;box-shadow:var(--sh)}.abx .upl .v{font-weight:700;font-size:14px}.abx .upl .ci{font-size:11px;color:var(--faint)}
-  .abx .km .est{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:650;margin-bottom:10px}
-  .abx .kmchart{display:flex;align-items:flex-end;gap:16px;height:104px;padding-left:44px;position:relative;border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2)}.abx .kmchart .ax{position:absolute;left:0;top:0;bottom:0;width:42px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;padding-right:5px;font-size:9.5px;color:var(--faint)}
-  .abx .kmbar{flex:1;max-width:66px;border-radius:3px 3px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:4px;color:#fff;font-size:10.5px;font-weight:650;white-space:nowrap;overflow:hidden}.abx .kmbar.c{background:var(--blue)}.abx .kmbar.v{background:var(--navy)}
-  .abx .kmlabs{display:flex;gap:16px;padding-left:44px;margin-top:5px}.abx .kmlabs span{flex:1;max-width:66px;text-align:center;font-size:10.5px;color:var(--muted)}
-  .abx .civ{display:flex;align-items:center;gap:7px;min-width:190px}.abx .civ .lo,.abx .civ .hi{font-size:11px;color:var(--faint);white-space:nowrap}.abx .citrack{flex:1;height:16px;position:relative}.abx .citrack .bar{position:absolute;top:6px;height:4px;border-radius:3px;background:var(--indigo-100)}.abx .citrack .pt{position:absolute;top:2px;width:2px;height:12px;background:var(--indigo);border-radius:2px}
-  .abx .sigbar{height:8px;background:#F0F1F6;border-radius:4px;overflow:hidden}.abx .sigbar i{display:block;height:100%}
-  .abx .tw{overflow-x:auto}
-  .abhead{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}.abhead .reading{margin-top:6px;font-size:15px}.alert{margin-top:8px;color:#8e1f0b;background:#fee9e8;border-radius:8px;padding:6px 10px;font-size:13px}
-  .kpi4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}@media(max-width:900px){.kpi4{grid-template-columns:repeat(2,1fr)}}
-  .kt .l{font-size:13px;color:var(--soft);font-weight:600}.kt.goal{box-shadow:inset 0 0 0 1.5px #303030}.kt .big{display:block;font-size:24px;margin:6px 0 2px}.kt small{display:block;font-size:11px}
-  .kt .pair{display:flex;gap:16px;margin:6px 0}.kt .pair b{font-size:19px;display:block}.kt .lift{font-size:15px;font-weight:700}
-  .frow{display:flex;align-items:center;gap:10px;margin:9px 0}.frow>span{width:130px;font-size:13px;color:var(--soft);flex:none}.fbars{flex:1;display:flex;flex-direction:column;gap:3px}
-  .fb{display:flex;align-items:center;gap:6px}.fb i{display:block;height:14px;border-radius:3px}.fb em{font-style:normal;font-size:12px;font-weight:600;white-space:nowrap}
-  .lg{display:flex;gap:14px;font-size:12px;color:var(--soft);margin:2px 0 6px}.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-  .sub1{font-size:13px;margin-top:10px}
-  table.mt tr{cursor:pointer}table.mt tr.gl td{font-weight:700}table.mt td.hg{background:#e3f1df}table.mt td.hr{background:#fee9e8}table.mt tr.dt{cursor:default}table.mt tr.dt td{text-align:left;white-space:normal;background:#fafafa}
-  .civ .cl{width:60px;color:var(--soft)}
-  details.how{margin-top:14px;font-size:13px;color:var(--soft)}details.how summary{cursor:pointer;font-weight:600}
-  .abmeta{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px;color:var(--soft)}.abmeta b{color:var(--ink,#1a1a1a)}
-  .kms{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-  .km{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;display:flex;flex-direction:column;position:relative}
-  .km.on{border-color:#182740;box-shadow:0 0 0 1px #182740}.km .t{font-weight:600;font-size:13px;min-height:34px}.km .star{color:#e0a33a;margin-right:4px}
-  .km .upl{font-size:20px;font-weight:700;display:flex;gap:6px;align-items:baseline;min-height:28px}.km .upl .muted{font-size:12px;font-weight:500}.km .ci{font-size:12px;color:var(--soft);font-weight:500}
-  .up{color:var(--good)}.dn{color:var(--bad)}.muted{color:var(--soft)}.tiny{font-size:11px;min-height:14px}.warn{color:var(--warn)}
-  .km .est{font-size:10.5px;letter-spacing:.04em;color:var(--soft);font-weight:600;margin:2px 0 8px}
-  .kmbars{display:flex;gap:10px;align-items:flex-end;margin-top:auto;padding-top:10px}.kmbars>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;text-align:center}
-  .kmbar{border-radius:6px 6px 0 0}.kmbar.c{background:#c9ced6}.kmbar.v{background:#426db3}
-  .kv{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}.kmbars small{font-size:11px;color:var(--soft);margin-top:4px}
-  .km .mk{margin-top:10px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 8px;font-size:12px;cursor:pointer}.km .mk:hover{border-color:#182740}
-  .chipG{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-size:11px;font-weight:700;margin-right:7px;color:#fff}.chipG.c{background:#9aa3ae}.chipG.v{background:#426db3}
-  table.sig td{vertical-align:middle}.civ{display:flex;align-items:center;gap:8px;font-size:12px}.citrack{flex:1;height:8px;background:#eef0f3;border-radius:4px;position:relative;min-width:110px}
-  .citrack i{position:absolute;top:0;bottom:0;background:#a9bde0;border-radius:4px}.citrack b{position:absolute;top:-3px;width:3px;height:14px;background:#182740;border-radius:2px;margin-left:-1px}
-  .mix{display:flex;align-items:center;gap:10px;margin:10px 0}.mix>span{width:120px;font-size:13px;color:var(--soft)}.mix>div{flex:1;display:flex;height:22px;border-radius:6px;overflow:hidden;background:#eef0f3}.mix i{display:block;height:100%}
+  :root{--ink:#303030;--muted:#616161;--line:#ebebeb;--bg:#f1f1f1;--up:#0c5132;--dn:#8e1f0b}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+  .ph{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}.ph h1{font-size:20px;font-weight:650;margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ph p{margin:4px 0 0;color:var(--muted)}.pa{margin-left:auto;display:flex;gap:8px}
+  .tabs{display:flex;gap:4px;background:#fff;border-radius:12px;padding:6px;box-shadow:0 1px 0 rgba(26,26,26,.07),0 0 0 1px rgba(26,26,26,.07);width:max-content;max-width:100%;overflow-x:auto}
+  .tabs button{font:inherit;font-weight:550;border:0;background:none;padding:6px 12px;border-radius:8px;cursor:pointer;color:var(--muted);white-space:nowrap}.tabs button:hover{background:#f1f1f1}.tabs button.on{background:#e3e3e3;color:var(--ink)}
+  .card,.tile{background:#fff;border-radius:12px;box-shadow:0 1px 0 rgba(26,26,26,.07),0 0 0 1px rgba(26,26,26,.07);padding:16px;min-width:0}
+  .card.tight{padding:4px 0;overflow-x:auto}.ch{display:flex;align-items:center;gap:8px;margin-bottom:12px}.ch h2,.ah h2{font-size:14px;font-weight:650;margin:0}.cr{margin-left:auto}
+  .g2,.g3,.g4{display:grid;gap:16px}.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .g4.flat .tile{box-shadow:none;background:#f7f7f7}
+  .tv{font-size:22px;font-weight:650;margin-top:6px;letter-spacing:-.2px}.tv .of{font-size:14px;color:var(--muted);font-weight:500}.ts{color:var(--muted);font-size:12px;margin-top:2px}
+  .up{color:var(--up);font-weight:650}.dn{color:var(--dn);font-weight:650}.muted{color:#8a8a8a}
+  .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.sp{flex:1}.mt{margin-top:12px}
+  .abs{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}.abs>div:first-child{flex:1;min-width:280px}.abs .g3 .tile{box-shadow:none;background:#f7f7f7;padding:12px}
+  .funnel{display:flex;flex-direction:column;gap:10px}.fr{display:grid;grid-template-columns:96px 1fr 70px 52px;align-items:center;gap:8px}.fr b{text-align:right}.fr em{font-style:normal;color:var(--muted);font-size:12px;text-align:right}
+  .ftrack{height:12px;background:#f1f1f1;border-radius:6px;overflow:hidden}.ftrack i{display:block;height:100%;background:#D96BC5;border-radius:6px}
+  .pb{display:grid;grid-template-columns:48px 1fr 64px;gap:8px;align-items:center;margin-top:8px}.pb b{text-align:right}
+  .chart{height:220px;position:relative}.mchart{height:150px;position:relative;margin-top:10px}
+  .ah{display:flex;align-items:center;gap:10px;margin-top:4px}.sel{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid #8a8a8a;background:#fff}
+  .prog{height:8px;background:#ebebeb;border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:#303030}
+  .warnb{margin-top:12px;background:#fff1e3;color:#5e4200;border-radius:8px;padding:8px 12px}
+  .var .ts{margin-bottom:6px}.sees{margin:8px 0 0;padding-left:18px;color:var(--ink)}.sees li{margin:2px 0}.vdot{width:10px;height:10px;border-radius:50%}
+  .mc{cursor:pointer}.mc:hover{box-shadow:0 1px 0 rgba(26,26,26,.07),0 0 0 1px #8a8a8a}.mc.sel{box-shadow:0 0 0 2px #303030}.mv{font-size:20px;margin-top:6px}
+  .prod{display:flex;gap:10px;align-items:center;margin:2px 0}.prod img,.noimg{width:36px;height:36px;border-radius:6px;object-fit:cover;flex:none;background:#f1f1f1;border:1px solid #ebebeb}.prod a{color:inherit}
+  a{color:#005bd3;text-decoration:none}a:hover{text-decoration:underline}
+  .empty{color:var(--muted);padding:12px 0}.sub{font-weight:650;margin-bottom:4px}
+  .mx{border-collapse:collapse;width:100%}.mx th,.mx td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line)}.mx th:first-child,.mx td:first-child{text-align:left}.mx th{color:var(--muted);font-weight:550}
+  .how{color:var(--muted)}.how summary{cursor:pointer;font-weight:550}.how p{max-width:780px}
+  @media (max-width:640px){.pa{margin-left:0}.fr{grid-template-columns:80px 1fr 56px 44px}}
+  .g5{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.tile.pick{cursor:pointer}.tile.pick:hover{box-shadow:0 0 0 1px #8a8a8a}.tile.pick.on{box-shadow:0 0 0 2px #303030}
+  .tw{overflow-x:auto}.pt{border-collapse:collapse;width:100%;font-size:12.5px}.pt th{background:#f7f7f7;color:var(--muted);font-weight:550;text-align:left;padding:8px;white-space:nowrap}.pt td{padding:9px 8px;border-top:1px solid var(--line);white-space:nowrap}.pt td:first-child{white-space:normal;min-width:190px}
+  .pt .n{text-align:right}.pt tbody tr:not(.tot){cursor:pointer}.pt tbody tr:not(.tot):hover{background:#f7f7f7}.pt tr.tot td{background:#fafafa;font-weight:600}.chev{color:#8a8a8a}
+  .share{display:inline-block;width:46px;height:6px;background:#f1f1f1;border-radius:3px;margin-right:6px;vertical-align:middle;overflow:hidden}.share i{display:block;height:100%;background:#D96BC5}
+  .shots{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}.shots.one{grid-template-columns:minmax(0,560px)}.shot img{width:100%;border-radius:8px;border:1px solid #ebebeb;margin-top:8px;display:block}
+  .trust{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px;padding:14px;background:#f7f7f7;border-radius:10px}.trust .prog{margin-top:8px}.pt tr.nc{cursor:default}
+  .ordn{grid-column:1/-1;border-top:1px solid #e3e3e3;padding-top:10px;font-size:13px}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div><h1>Odoo Cross Sells</h1><p>Add-ons picked from Odoo baskets, shown on product pages, best sellers and the cart</p></div>
-    <div class="seg" id="seg"><button data-d="start" class="on">Since test start</button><button data-d="7">7 days</button><button data-d="14">14 days</button><button data-d="30">30 days</button><button data-d="60">60 days</button></div>
-  </header>
-  <div class="seg tabs" id="tabs" style="margin-bottom:14px"><button data-v="online" class="on">Online cross sells</button><button data-v="ab">A/B test</button><button data-v="odoo">Shops vs online (Odoo)</button></div>
-  <div id="app"><div class="msg">Loading…</div></div>
-</main>
+<ui-nav-menu><a href="?p=overview" rel="home">Overview</a><a href="?p=placements">Cross sells</a><a href="?p=ab">A/B test</a><a href="?p=odoo">Shops vs online</a></ui-nav-menu>
+<div id="app"><div class="wrap"><s-spinner accessibilityLabel="Loading"></s-spinner></div></div>
 <script>
 const SRC = { pick: 'Product page picks', best: 'Best sellers tabs', drawer: 'Cart drawer', near: 'Sold out: closest match', qv: 'Pop-up', okb: 'Other' };
 const egp = (n) => 'EGP ' + Math.round(n || 0).toLocaleString('en-US');
@@ -115,20 +67,7 @@ function delta(cur, prev) {
   const ch = (cur - prev) / prev * 100, cls = Math.abs(ch) < 0.5 ? 'flat' : ch > 0 ? 'up' : 'down';
   return `<span class="d ${cls}">${ch > 0 ? '↑' : ch < 0 ? '↓' : ''}${Math.abs(ch).toFixed(1)}%</span>`;
 }
-let days = 'start', charts = [], view = 'online', last = null;
-document.getElementById('tabs').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); view = b.dataset.v;
-  document.getElementById('seg').style.visibility = view === 'online' ? 'visible' : 'hidden'; if (last) show(last);
-});
-const show = (d) => { const err = d.shErr;
-  if (err) { charts.forEach((c) => c.destroy()); charts = []; document.getElementById('app').innerHTML = `<div class="card msg">${esc(err)} <button onclick="load()">Retry</button></div>`; return; }
-  ({ odoo: renderOdoo, ab: renderAB }[view] || render)(d); };
-document.getElementById('seg').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); days = b.dataset.d === 'start' ? 'start' : +b.dataset.d; if (last) show(last); /* all 60 days are loaded once; the window just re-cuts them */
-});
-
+let days = 'start', charts = [], view = 'overview', last = null;
 /* Shopify straight from the browser (direct API access, as the staff member who opened the app). */
 async function AQ(query, variables) {
   const r = await fetch('shopify:admin/api/2026-10/graphql.json', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
@@ -255,116 +194,8 @@ async function setGoal(goal) {
     shopify.toast.show('Goal saved'); detail = goal; load();
   } catch (e) { shopify.toast.show('Could not save the goal: ' + e.message, { isError: true }); }
 }
-let detail = null, abView = 'key';
-const showDetail = (k) => { detail = k; if (last) renderAB(last); document.getElementById('md')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-const setAbView = (v) => { abView = v; if (last) renderAB(last); };
 setInterval(() => { if (view === 'ab' && !document.hidden && last?.sh?.A?.rollout) load(); }, 60000);   /* live while the tab is open */
 const fdate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-function renderAB(d) {
-  charts.forEach((c) => c.destroy()); charts = [];
-  const S = d.sh || {}, A = S.A, app = document.getElementById('app');
-  if (!A) { app.innerHTML = `<div class="abx"><div class="banner info">${loading ? 'Loading the test from Shopify…' : 'No A/B numbers yet.'}</div></div>`; return; }
-  const sesBy = Object.fromEntries(S.ses.map((r) => [String(r.rollout_treatment_id), r]));
-  const G = {}; for (const [id, g] of Object.entries(A.groups)) { const r = sesBy[id] || {}; G[id] = { ...g, id, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 }; }
-  const running = !!A.rollout, ids = Object.keys(G).sort((a, b) => (G[a].label === 'Test') - (G[b].label === 'Test'));
-  const C = running ? G[ids.find((i) => G[i].label === 'Control')] : G[ids[0]], T = running ? G[ids.find((i) => G[i].label === 'Test')] : null;
-  const arms = running ? [[C, 'Control', 'Without cross sells', 'c'], [T, 'Test', 'With cross sells', 'v']] : [[C, 'All shoppers', 'All shoppers (no test running)', 'c']];
-  const goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'rps', k0 = detail && GOALS[detail] ? detail : goal;
-  const nDays = Math.max(1, Math.round((Date.parse(A.until) - Date.parse(A.start)) / 864e5) + 1), sesDay = ids.reduce((a, i) => a + G[i].sessions, 0) / nDays;
-  const tot = (key) => ids.reduce((a, i) => a + (G[i][key] || 0), 0);
-  const chance = (p) => p > 99.4 ? '>99%' : p < 0.6 ? '<1%' : p.toFixed(0) + '%';
-  const srm = running && (C.sessions + T.sessions) ? (() => { const n = C.sessions + T.sessions, e = T.split / 100, z = (T.sessions - n * e) / Math.sqrt(n * e * (1 - e)); return Math.abs(z) > 3 ? `Traffic split is off: ${pct(T.sessions, n)} of sessions in Test, ${T.split}% planned. Check the test in Shopify before trusting the numbers.` : ''; })() : '';
-  const late = running && S.goal?.updatedAt && new Date(S.goal.updatedAt) > new Date(A.start + 'T00:00:00+02:00');
-  const read = A.at ? new Date(A.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
-  const icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>';
-  let h = `<div class="abx"><div class="row mb" style="flex-wrap:wrap">
-    <b style="font-size:15px">${running ? esc(A.rollout.name) : 'Cross sells vs none'}</b>
-    <span class="pill ${running ? 's-gather' : 's-pending'}"><span class="dot"></span>${running ? (A.rollout.status === 'ACTIVE' ? 'Running' : esc(A.rollout.status.toLowerCase())) : 'Not running'}</span>
-    <span class="sp"></span>
-    <span class="seg2"><button class="${abView === 'key' ? 'on' : ''}" onclick="setAbView('key')">Key metrics</button><button class="${abView === 'all' ? 'on' : ''}" onclick="setAbView('all')">All metrics</button></span>
-    <span class="pill">Range: all data (${esc(A.start)} – ${esc(A.until)})</span>
-    <span class="pill livepill" title="Refreshes every minute while this tab is open">${A.live ? 'Live · read ' + read : 'Last night'}</span>
-    <button class="btn sm" onclick="load()">Refresh</button><button class="btn sm" onclick="exportAB()">Export all (CSV)</button></div>`;
-  h += `<div class="infobar"><div class="f"><span class="k">Start date</span><span class="v">${fdate(A.start)}</span></div>
-    <div class="f"><span class="k">End date</span><span class="v">${running ? '21 Dec 2026' : '—'}</span></div>
-    <div class="f"><span class="k">Timezone</span><span class="v">Cairo</span></div>
-    <div class="f"><span class="k">Split</span><span class="v">${arms.map(([x]) => x.split + '%').join(' / ')}</span></div>
-    <div class="sp"></div>
-    <div class="f r"><span class="k">Orders</span><span class="v">${num(tot('orders'))}</span></div>
-    <div class="f r"><span class="k">Sessions</span><span class="v">${num(tot('sessions'))}</span></div>
-    <div class="f r"><span class="k">Revenue</span><span class="v">${egp(tot('rev'))}</span></div></div>`;
-  if (srm) h += `<div class="banner err">${icon}<div><b>${esc(srm)}</b></div></div>`;
-  if (late) h += `<div class="banner warn">${icon}<div><b>The goal was changed after the test started.</b> Treat the result with caution.</div></div>`;
-  if (running && (C.orders < 30 || T.orders < 30)) h += `<div class="banner warn">${icon}<div><b>Not readable yet.</b> ${num(C.orders)} control and ${num(T.orders)} test orders so far. A verdict needs 30+ orders a side, and a lift under about 6% needs roughly 4 weeks to show — don't call this one.</div></div>`;
-  if (!running) h += `<div class="banner info">${icon}<div><b>No test running.</b> Showing the last 14 days of all shoppers as the baseline to beat.</div></div>`;
-  /* what the app itself did in the Test group: tiles seen, clicked, added, and the revenue from items added from tiles */
-  if (running) {
-    const O = S.online?.jsonValue, today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), SRCN = { pick: 'Product page picks', best: 'Best sellers tabs', drawer: 'Cart drawer', near: 'Sold out: closest match', qv: 'Pop-up', okb: 'Other' };
-    const P = {}; const add = (src, k, v) => { (P[src] ||= { views: 0, clicks: 0, adds: 0, orders: 0, units: 0, rev: 0 })[k] += v || 0; };
-    for (const r of (O?.rows || [])) if (r.d >= A.start && r.d <= A.until) { add(r.src, 'views', r.views); add(r.src, 'clicks', r.clicks); add(r.src, 'adds', r.adds); if (r.d < today) { add(r.src, 'orders', r.orders); add(r.src, 'units', r.units); add(r.src, 'rev', r.rev); } }
-    for (const [src, x] of Object.entries(S.xs?.by || {})) { add(src, 'orders', x.orders); add(src, 'units', x.units); add(src, 'rev', x.rev); }
-    const X = Object.values(P).reduce((a, x) => { for (const k in x) a[k] = (a[k] || 0) + x[k]; return a; }, {});
-    const srcs = Object.keys(P).sort((a, b) => P[b].rev - P[a].rev || P[b].views - P[a].views);
-    h += `<div class="card mb"><div class="hdr"><h2>What the cross sells did</h2><span class="tiny muted">Test group only — the Control never sees them</span><span class="sp"></span><span class="tiny muted">sales: Shopify orders, live today · tiles seen / clicks / adds: GA4, refreshed every 3 hours${(O?.ga4_at || O?.at) ? ' (last ' + new Date(O.ga4_at || O.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}; GA4 itself runs a few hours behind</span></div>
-      <div class="infobar" style="border:0;box-shadow:none;margin:0;border-bottom:1px solid var(--line-2);border-radius:0">
-        <div class="f"><span class="k">Cross-sell revenue</span><span class="v">${egp(X.rev)}</span></div>
-        <div class="f"><span class="k">Share of Test revenue</span><span class="v">${pct(X.rev, T.rev)}</span></div>
-        <div class="f"><span class="k">Items added from tiles, sold</span><span class="v">${num(X.units)}</span></div>
-        <div class="sp"></div>
-        <div class="f r"><span class="k">Tiles seen</span><span class="v">${num(X.views)}</span></div>
-        <div class="f r"><span class="k">Clicked</span><span class="v">${num(X.clicks)} <span class="tiny muted">${pct(X.clicks, X.views)}</span></span></div>
-        <div class="f r"><span class="k">Added to cart</span><span class="v">${num(X.adds)} <span class="tiny muted">${pct(X.adds, X.views)}</span></span></div></div>
-      <div class="tw"><table><thead><tr><th>Placement</th><th>Tiles seen</th><th>Clicks</th><th>Click rate</th><th>Adds</th><th>Orders</th><th>Units sold</th><th>Revenue</th><th style="width:22%">Share of cross-sell revenue</th></tr></thead><tbody>` +
-      (srcs.length ? srcs.map((src) => { const x = P[src]; return `<tr><td><b>${esc(SRCN[src] || src)}</b></td><td>${num(x.views)}</td><td>${num(x.clicks)}</td><td>${pct(x.clicks, x.views)}</td><td>${num(x.adds)}</td><td>${num(x.orders)}</td><td>${num(x.units)}</td><td>${egp(x.rev)}</td><td><div class="sigbar"><i style="width:${X.rev ? 100 * x.rev / X.rev : 0}%;background:var(--navy)"></i></div></td></tr>`; }).join('')
-        : '<tr><td colspan="9" class="muted">Nothing yet. Sales show as soon as an order contains an item added from a tile; tile views and clicks arrive overnight from GA4.</td></tr>') +
-      `</tbody></table></div></div>`;
-  }
-  /* metric cards */
-  const cardKeys = abView === 'key' ? [goal, ...['cvr', 'atc', 'aov'].filter((k) => k !== goal)].slice(0, 4) : Object.keys(GOALS);
-  const tickF = (k, v) => { const g = GOALS[k]; return g.p ? (100 * v).toFixed(1) + '%' : k === 'upt' ? (+v).toFixed(1) : num(v); };
-  h += '<div class="kmgrid mb">' + cardKeys.map((k) => {
-    const g = GOALS[k], c = running ? cmp(k, T, C) : null, vals = arms.map(([x]) => val(k, x)), max = Math.max(...vals.map((v) => v ? v.v : 0)) * 1.15 || 1;
-    const est = c && g.est ? c.d * sesDay * 30 : null;
-    return `<div class="km clk${k0 === k ? ' on' : ''}" onclick="showDetail('${k}')" title="${esc(g.tip)}">
-      <div class="t">${k === goal ? '<span class="star">★</span>' : ''}${g.lab}${k === goal ? '' : `<span class="sp"></span><button class="btn sm gho" onclick="event.stopPropagation();setGoal('${k}')">☆ Make goal</button>`}</div>
-      ${c ? `<div class="upl"><span class="v ${c.up >= 0 ? 'up' : 'dn'}">${c.up >= 0 ? '↑' : '↓'} ${Math.abs(c.up).toFixed(2)}%</span><span class="ci">±${((c.hi - c.lo) / 2).toFixed(1)}</span></div>
-        ${c.lo < 0 && c.hi > 0 ? '<div class="tiny" style="color:var(--amber);margin:-2px 0 6px">interval includes 0 — not conclusive</div>' : ''}
-        ${est != null ? `<div class="est">EST. ${est >= 0 ? '+' : '−'}${egp(Math.abs(est))} MONTHLY</div>` : '<div class="est">&nbsp;</div>'}`
-        : `<div class="upl"><span class="v muted">${running ? 'needs 30+ orders a side' : 'no test yet'}</span></div><div class="est">&nbsp;</div>`}
-      <div class="kmchart"><div class="ax">${[1, .75, .5, .25, 0].map((f) => `<span>${tickF(k, max * f)}</span>`).join('')}</div>
-        ${arms.map(([, , , cls], i) => `<div class="kmbar ${cls}" style="height:${Math.max(6, (vals[i] ? vals[i].v : 0) / max * 100)}%">${vals[i] ? vals[i].f(vals[i].v) : '–'}</div>`).join('')}</div>
-      <div class="kmlabs">${arms.map(([, s]) => `<span>${s}</span>`).join('')}</div></div>`;
-  }).join('') + '</div>';
-  /* metric details */
-  const g = GOALS[k0], c = running ? cmp(k0, T, C) : null, rows = arms.map(([x]) => val(k0, x));
-  const ci = rows.map((r) => r ? [r.v - 1.96 * r.se, r.v + 1.96 * r.se] : [0, 0]), lo = Math.min(...ci.map((x) => x[0])), hi = Math.max(...ci.map((x) => x[1])), span = (hi - lo) || 1;
-  h += `<div class="card mb" id="md"><div class="hdr"><h2>Metric details</h2><span class="tiny muted">${k0 === goal ? '★ ' : ''}${g.lab}</span><span class="sp"></span><span class="tiny muted">${esc(g.tip)}</span></div><div class="bd tw">
-    <h3 style="margin-bottom:8px">Statistical significance</h3>
-    <table><thead><tr><th>Group</th><th>Sessions</th><th>Orders</th><th>Uplift</th><th>Probability to beat control</th><th>Probability to be best</th><th style="min-width:230px">Value</th></tr></thead><tbody>` +
-    arms.map(([x, short, name, cls], i) => { const r = rows[i], isC = cls === 'c'; if (!r) return '';
-      return `<tr><td><span class="chipG ${cls === 'v' ? 'g1' : ''}" style="display:inline-flex;margin-right:7px">${short[0]}</span><b>${name}</b></td><td>${num(x.sessions)}</td><td>${num(x.orders)}</td>
-        <td>${isC || !c ? '<span class="muted">n/a</span>' : `<span class="${c.up >= 0 ? 'up' : 'dn'}">${c.up >= 0 ? '↑' : '↓'} ${Math.abs(c.up).toFixed(1)}%</span> <span class="tiny muted">[${c.lo >= 0 ? '+' : ''}${c.lo.toFixed(1)}, ${c.hi >= 0 ? '+' : ''}${c.hi.toFixed(1)}]</span>${c.lo < 0 && c.hi > 0 ? ' <span class="pill s-paused" style="font-size:10px"><span class="dot"></span>includes 0</span>' : ''}`}</td>
-        <td>${isC || !c ? '<span class="muted">n/a</span>' : `<b>${chance(c.pBeat)}</b>`}</td><td>${c ? `<b>${chance(isC ? 100 - c.pBeat : c.pBeat)}</b>` : '<span class="muted">—</span>'}</td>
-        <td><div class="civ"><span class="lo">${r.f(ci[i][0])}</span><div class="citrack"><div class="bar" style="left:${(ci[i][0] - lo) / span * 100}%;width:${(ci[i][1] - ci[i][0]) / span * 100}%"></div><div class="pt" style="left:${(r.v - lo) / span * 100}%"></div></div><span class="hi">${r.f(ci[i][1])}</span></div></td></tr>`; }).join('') +
-    `</tbody></table><p class="tiny muted" style="margin-top:10px">95% intervals from each group's own spread (Welch for averages, two-proportion for rates). An interval that <b>includes 0</b> is not a result, however tempting the point estimate looks.</p></div></div>`;
-  /* time series */
-  h += `<div class="card mb"><div class="hdr"><h2>Conversion rate over time</h2><span class="sp"></span><span class="tiny muted">per day, Shopify sessions</span></div><div class="bd"><div class="chart"><canvas id="c2"></canvas></div></div></div>`;
-  /* orders + baskets */
-  const cA = running ? cmp('aov', T, C) : null;
-  h += `<div class="card mb"><div class="hdr"><h2>Orders</h2><span class="sp"></span><span class="tiny muted">value at checkout incl. delivery · capped at ${egp(A.cap || 6185)} in “AOV, big orders capped”</span></div><div class="tw"><table><thead><tr><th>Group</th><th>Sessions</th><th>Added to cart</th><th>Reached checkout</th><th>Orders</th><th>Revenue</th><th>AOV</th><th>Items / order</th><th>vs control</th></tr></thead><tbody>` +
-    arms.map(([x, short, name, cls], i) => `<tr><td><span class="chipG ${cls === 'v' ? 'g1' : ''}" style="display:inline-flex;margin-right:7px">${short[0]}</span><b>${name}</b></td><td>${num(x.sessions)}</td><td>${num(x.atc)} <span class="tiny muted">${pct(x.atc, x.sessions, 2)}</span></td><td>${num(x.co)} <span class="tiny muted">${pct(x.co, x.sessions, 2)}</span></td><td>${num(x.orders)}</td><td>${egp(x.rev)}</td><td>${x.orders ? egp(x.rev / x.orders) : '—'}</td><td>${x.orders ? (x.units / x.orders).toFixed(2) : '—'}</td><td class="${i && cA ? (cA.up >= 0 ? 'up' : 'dn') : 'muted'}">${i && cA ? (cA.up >= 0 ? '+' : '') + cA.up.toFixed(1) + '% AOV' : '—'}</td></tr>`).join('') + '</tbody></table></div></div>';
-  const cats = [...new Set(arms.flatMap(([x]) => Object.keys(x.mix || {})))], tots = arms.map(([x]) => Object.values(x.mix || {}).reduce((a, b) => a + b, 0) || 1);
-  const crow = cats.map((cn) => [cn, arms.map(([x], i) => (x.mix?.[cn] || 0) / tots[i])]).sort((a, b) => b[1][0] - a[1][0]);
-  h += `<div class="card mb"><div class="hdr"><h2>What baskets are made of</h2><span class="sp"></span><span class="tiny muted">share of each group's revenue · 2+ categories: ${arms.map(([x, s]) => `${s} ${pct(x.multi, x.orders)}`).join(', ')} · clothing orders with a toy: ${arms.map(([x, s]) => `${s} ${pct(x.cloth_toy, x.cloth)}`).join(', ')}</span></div><div class="tw"><table><thead><tr><th>Category</th>${arms.map(([, s]) => `<th>${s}</th>`).join('')}${running ? '<th>Test vs control</th>' : ''}<th style="width:34%">Share</th></tr></thead><tbody>` +
-    crow.map(([cn, v]) => { const rel = running && v[0] ? (v[1] - v[0]) / v[0] * 100 : null;
-      return `<tr><td><b>${esc(cn)}</b></td>${v.map((p) => `<td>${(100 * p).toFixed(1)}%</td>`).join('')}${running ? `<td class="${rel === null ? 'muted' : rel >= 0 ? 'up' : 'dn'}">${rel === null ? '—' : (rel >= 0 ? '+' : '') + rel.toFixed(0) + '%'}</td>` : ''}<td><div style="display:flex;gap:4px">${v.map((p, gi) => `<div class="sigbar" style="flex:1"><i style="width:${100 * p}%;background:${gi === 0 ? 'var(--blue)' : 'var(--navy)'}"></i></div>`).join('')}</div></td></tr>`; }).join('') + '</tbody></table></div></div>';
-  h += `<details class="how"><summary>How this is worked out</summary><p>Everything is Shopify. Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts sessions, cart adds, checkouts and conversions for each group. Orders, order value, units and categories (product type) come from Shopify sales per order: only orders placed since the test started, valued at checkout incl. delivery; returns processed later are left out. Online store checkouts only. Gross profit is not in the tool: Export all, and it is worked out from Odoo.</p></details></div>`;
-  app.innerHTML = h;
-  const days_ = [...new Set(S.dly.map((r) => r.day))].sort(), lab = days_.map((x) => new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-  const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
-  charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: lab, datasets: arms.map(([x, s, , cls]) => ({ label: s, data: series(x.id), borderColor: cls === 'v' ? '#1E2A5A' : '#5B8DEF', backgroundColor: cls === 'v' ? '#1E2A5A' : '#5B8DEF', tension: .3, spanGaps: true, pointRadius: 3 })) },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (+v).toFixed(2) + '%' } } } } }));
-}
 /* Online tab data = app field okb.online (nightly job: Shopify orders tagged _okb + GA4 tile events), cut to the chosen window. */
 function onlineData(d) {
   const O = d.sh?.online?.jsonValue; if (!O) return null;
@@ -390,89 +221,305 @@ function onlineData(d) {
   return { kpi: k, sources, daily, from, to: today, top_sold: t.sold, top_recommended: t.seen, recent: O.recent.filter((r) => r.ts.slice(0, 10) >= from),
     ga4: O.ga4, live: !!S0 || k.orders > 0, at: O.at, base };
 }
-function render(d0) {
+/* ===== New screens (Polaris web components, Shopify's own app UI). Data functions above are unchanged. ===== */
+let page = new URLSearchParams(location.search).get('p') || 'overview', metric = null;
+const PAGES = { overview: pgOverview, placements: pgPlacements, ab: pgAB, odoo: pgOdoo };
+const view_ = () => (page === 'ab' ? 'ab' : page);
+function go(p) { page = p; place = null; view = view_(); history.pushState(null, '', '?p=' + p); window.scrollTo(0, 0); if (last) show(last); }
+window.addEventListener('popstate', () => { page = new URLSearchParams(location.search).get('p') || 'overview'; place = new URLSearchParams(location.search).get('src') || null; view = view_(); if (last) show(last); });
+view = view_();
+const show = (d) => {
   charts.forEach((c) => c.destroy()); charts = [];
-  const d = onlineData(d0); if (!d) { document.getElementById('app').innerHTML = '<div class="card empty">Online numbers arrive with the nightly job.</div>'; return; }
-  const k = d.kpi, src = (d.sources || []).slice().sort((a, b) => b.revenue - a.revenue || b.views - a.views);
-  const card = (label, val, dl, sub, t) => `<div class="card kpi"><div class="l">${label} ${tip(t)}</div><b>${val}${dl}</b><small>${sub}</small></div>`;
-  const rpm = k.views ? k.revenue / k.views * 1000 : 0, rpmP = k.views_prev ? k.revenue_prev / k.views_prev * 1000 : null;
-  const live = d.live, none = !live || (!k.views && !k.revenue && !k.units);
-  let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Not live yet.</b> No shopper sees the cross sells until the test (or the theme) goes live. Baseline in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV across ${num(k.web_orders)} web orders.</div>` : '';
-  if (!d.ga4) h += '<div class="card" style="margin-bottom:14px;background:#fff4d6;box-shadow:none">Tile views and clicks are not connected yet (GA4 key missing in the nightly job). Sales below are complete.</div>';
-  h += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="mk" onclick="exportOnline()">Export all (CSV)</button></div>';
-  h += '<div class="kpis">' +
-    card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of ${d.base} revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
-    card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} ${d.base} orders`, 'Web orders containing at least one item added from our tiles.') +
-    card('Units added', num(k.units), delta(k.units, k.units_prev), 'cross-sell items sold', 'Quantity of cross-sell lines in orders.') +
-    card('Click rate', pct(k.clicks, k.views), delta(k.views ? k.clicks / k.views : 0, k.views_prev ? k.clicks_prev / k.views_prev : null), `${num(k.clicks)} clicks / ${num(k.views)} seen`, 'Tiles opened ÷ tiles that scrolled into view (each tile counted once per page view).') +
-    card('Add-to-cart rate', pct(k.adds, k.views), delta(k.views ? k.adds / k.views : 0, k.views_prev ? k.adds_prev / k.views_prev : null), `${num(k.adds)} added`, 'Add to cart presses on our tiles ÷ tiles seen.') +
-    card('Revenue per 1,000 seen', egp(rpm), delta(rpm, rpmP), `${num(k.views)} tiles seen`, 'Cross-sell revenue ÷ tiles seen × 1,000. Compares placements fairly.') +
-    '</div>';
-  h += `<div class="card"><div class="hd"><h2>Cross-sell revenue per day</h2><span>${esc(d.from)} – ${esc(d.to)} · daily</span></div>${none ? '<div class="empty">No cross-sell sales yet.</div>' : '<div class="chart"><canvas id="c1"></canvas></div>'}</div>`;
-  const F = [['Seen', k.views], ['Clicked', k.clicks], ['Added', k.adds], ['Sold', k.units]], fmax = Math.max(1, ...F.map((x) => x[1]));
-  h += '<div class="row"><div class="card"><div class="hd"><h2>By placement</h2><span>sorted by revenue</span></div><table><tr><th>Placement</th><th>Seen</th><th>Click rate</th><th>Added</th><th>Orders</th><th>Revenue</th><th>Per 1,000 seen</th></tr>' +
-    (src.length ? src.map((x) => `<tr><td>${esc(SRC[x.src] || x.src)}</td><td>${num(x.views)}</td><td>${pct(x.clicks, x.views)}</td><td>${num(x.adds)}</td><td>${num(x.orders)}</td><td>${egp(x.revenue)}</td><td>${x.views ? egp(x.revenue / x.views * 1000) : '–'}</td></tr>`).join('')
-      : '<tr><td colspan="7" class="empty">Nothing recorded yet. Numbers start once the new theme (or its A/B split) is live.</td></tr>') +
-    '</table></div><div class="card"><div class="hd"><h2>Funnel</h2><span>all placements</span></div><div class="funnel">' +
-    F.map((x, i) => `<div><span>${x[0]}</span><em style="width:${Math.max(0.6, x[1] / fmax * 100)}%;opacity:${1 - i * 0.18}"></em><b>${num(x[1])}</b></div>`).join('') +
-    `</div><div class="note">Seen → clicked ${pct(k.clicks, k.views)} · seen → added ${pct(k.adds, k.views)} · added → sold ${pct(k.units, k.adds)}</div></div></div>`;
-  const ts = d.top_sold || [], tmax = Math.max(1, ...ts.map((x) => x.revenue)), tr = d.top_recommended || [];
-  h += '<div class="row2"><div class="card"><div class="hd"><h2>Most sold cross sells</h2><span>by revenue</span></div><table><tr><th>Product</th><th>Orders</th><th>Units</th><th>Revenue</th></tr>' +
-    (ts.length ? ts.map((x) => `<tr><td class="bar"><i style="width:${x.revenue / tmax * 100}%"></i><span>${esc(x.title)}</span></td><td>${num(x.orders)}</td><td>${num(x.units)}</td><td>${egp(x.revenue)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No cross-sell sales in this period yet.</td></tr>') +
-    '</table></div><div class="card"><div class="hd"><h2>Most recommended</h2><span>most seen tiles</span></div><table><tr><th>Product</th><th>Seen</th><th>Clicks</th><th>Click rate</th></tr>' +
-    (tr.length ? tr.map((x) => `<tr><td>${pretty(x.handle)}</td><td>${num(x.views)}</td><td>${num(x.clicks)}</td><td>${pct(x.clicks, x.views)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No tiles seen in this period yet.</td></tr>') +
-    '</table></div></div>';
-  const rc = d.recent || [];
-  h += '<div class="card" style="margin-top:14px"><div class="hd"><h2>Latest orders with cross sells</h2><span>check any sale against the order</span></div>' +
-    (rc.length ? rc.map((o) => `<div class="ord"><b>${esc(o.order)}</b> <small>${new Date(o.ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · order ${egp(o.total)}</small><br>` +
-      (o.items || []).map((it) => `${esc(it.title)} × ${it.q} <small>${egp(it.value)}</small><span class="chip">${esc(SRC[it.src] || it.src)}</span>`).join('<br>') + '</div>').join('') : '<div class="empty">No orders with cross sells in this period yet.</div>') +
-    '<div class="note">Attribution: an item counts when it was added from one of our tiles (it carries the hidden tag _okb on the order line). No time window, no view-through credit. Web orders only (Shopify, last 60 days); refunds and cancellations are not deducted. Tile views and clicks: GA4 list events okb_<placement>; theme previews are not counted.</div></div>';
-  document.getElementById('app').innerHTML = h;
-  if (none) return;
-  const lab = d.daily.map((x) => new Date(x.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-  const base = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${egp(c.parsed.y)}` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => num(v) } } } };
-  charts.push(new Chart(document.getElementById('c1'), { data: { labels: lab, datasets: [
-    { type: 'bar', label: 'Cross-sell revenue', data: d.daily.map((x) => x.revenue), backgroundColor: '#426db3', borderRadius: 4, yAxisID: 'y', order: 2 },
-    { type: 'line', label: 'Share of web revenue', data: d.daily.map((x) => x.web ? +(x.revenue / x.web * 100).toFixed(2) : null), borderColor: '#e0a33a', backgroundColor: '#e0a33a', tension: .3, yAxisID: 'y2', order: 1, spanGaps: true }] },
-    options: { ...base, plugins: { ...base.plugins, tooltip: { callbacks: { label: (c) => c.dataset.yAxisID === 'y2' ? `${c.dataset.label}: ${c.parsed.y}%` : `${c.dataset.label}: ${egp(c.parsed.y)}` } } },
-      scales: { x: base.scales.x, y: { ...base.scales.y, beginAtZero: true }, y2: { position: 'right', beginAtZero: true, grid: { display: false }, ticks: { callback: (v) => v + '%' } } } } }));
+  const app = document.getElementById('app');
+  if (d.shErr) { app.innerHTML = `<s-page heading="Odoo Cross Sells"><s-banner tone="critical" heading="Could not read Shopify">${esc(d.shErr)}<s-button slot="secondary-actions" onclick="load()">Try again</s-button></s-banner></s-page>`; return; }
+  (PAGES[page] || pgOverview)(d, app);
+  try { sessionStorage.setItem('okb_last', JSON.stringify(d)); } catch (e) { /* cache is a convenience only */ }
+};
+
+/* ---------- shared pieces ---------- */
+const PURPLE = '#8F7EF0', PINK = '#D96BC5';
+const PLACE = {
+  pick: ['Product page picks', '3 add-ons under Add to cart, in the shopper\'s size'],
+  best: ['Best-seller tabs', 'Clothing, toys, baby… tabs on the product page'],
+  drawer: ['Cart add-ons', 'Suggestions inside the cart drawer'],
+  near: ['Sold out: closest match', 'In-stock lookalike when a size is sold out'],
+  qv: ['Quick view', 'Pop-up opened from a tile'], okb: ['Other', 'Older tags'] };
+const today = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10);
+const dshort = (x) => new Date(x + (x.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const tstamp = (iso) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const arrow = (up) => (up >= 0 ? '↑' : '↓');
+const chg = (up, dp = 2) => up == null ? '<span class="muted">–</span>' : `<span class="${up >= 0 ? 'up' : 'dn'}">${up >= 0 ? '+' : '−'}${Math.abs(up).toFixed(dp)}% ${arrow(up)}</span>`;
+const tile = (label, value, sub = '') => `<div class="tile"><s-text tone="subdued">${label}</s-text><div class="tv">${value}</div>${sub ? `<div class="ts">${sub}</div>` : ''}</div>`;
+const header = (title, sub, actions = '') => `<div class="ph"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div><div class="pa">${actions}</div></div>`;
+const inAdmin = window.top !== window;   /* inside Shopify the sidebar (ui-nav-menu) is the menu */
+const nav = () => inAdmin ? '' : `<div class="tabs">${[['overview', 'Overview'], ['placements', 'Cross sells'], ['ab', 'A/B test'], ['odoo', 'Shops vs online']].map(([k, l]) => `<button class="${page === k ? 'on' : ''}" onclick="go('${k}')">${l}</button>`).join('')}</div>`;
+const card = (title, body, right = '') => `<section class="card">${title ? `<div class="ch"><h2>${title}</h2>${right ? `<div class="cr">${right}</div>` : ''}</div>` : ''}${body}</section>`;
+const empty = (t) => `<div class="empty">${t}</div>`;
+const how = (t) => `<details class="how"><summary>How this is worked out</summary><p>${t}</p></details>`;
+const liveNote = (A) => A?.live ? `Live · read ${new Date(A.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'Last night';
+
+/* groups of the running test, with Shopify's session counts joined on */
+function groupsOf(S) {
+  const A = S.A; if (!A) return null;
+  const sesBy = Object.fromEntries((S.ses || []).map((r) => [String(r.rollout_treatment_id), r]));
+  const G = {}; for (const [id, g] of Object.entries(A.groups)) { const r = sesBy[id] || {}; G[id] = { ...g, id, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 }; }
+  const ids = Object.keys(G), running = !!A.rollout;
+  const C = running ? G[ids.find((i) => G[i].label === 'Control')] : G[ids[0]], T = running ? G[ids.find((i) => G[i].label === 'Test')] : null;
+  return { A, G, C, T, running };
 }
-/* Shops vs online, straight from Odoo (refreshed nightly by the picks job). Every rate shows x of n. */
-const CATS = ['Clothing', 'Toys', 'Baby Essentials', 'School', 'Party'];
-function renderOdoo(d) {
-  charts.forEach((c) => c.destroy()); charts = [];
-  const o = d.odoo, app = document.getElementById('app');
-  if (!o) { app.innerHTML = '<div class="card empty">Odoo numbers arrive with the nightly job.</div>'; return; }
-  const S = o.channels.shops, O = o.channels.online;
-  const vs = (s, on) => { if (!s) return ''; const ch = (on - s) / s * 100; return `<span class="d ${ch < 0 ? 'down' : 'up'}">online ${ch > 0 ? '+' : ''}${ch.toFixed(0)}% vs shops</span>`; };
-  const pair = (label, sv, ov, fmt, sub) => { const mx = Math.max(sv, ov) || 1;
-    return `<div class="card kpi"><div class="l">${label}</div><div class="cmp"><span>Shops</span><i style="width:${sv / mx * 100}%"></i><b>${fmt(sv)}</b></div><div class="cmp on"><span>Online</span><i style="width:${ov / mx * 100}%"></i><b>${fmt(ov)}</b></div><div>${vs(sv, ov)}</div><small>${sub}</small></div>`; };
-  const p1 = (x) => x.toFixed(1) + '%';
-  let h = `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none">Odoo orders <b>${esc(o.from)} – ${esc(o.to)}</b>: ${num(S.orders)} shop orders (POS) vs ${num(O.orders)} online orders (Shopify, as booked in Odoo). Updated ${new Date(d.odoo_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.</div>`;
-  h += '<div class="kpis">' +
-    pair('AOV', S.aov, O.aov, egp, 'average order value incl. VAT') +
-    pair('Items per order', S.upt, O.upt, (x) => x.toFixed(2), 'units per order') +
-    pair('Orders with 2+ different items', S.multi2 / S.orders * 100, O.multi2 / O.orders * 100, p1, `${num(S.multi2)} of ${num(S.orders)} vs ${num(O.multi2)} of ${num(O.orders)}`) +
-    pair('Orders with 5+ units', S.units5 / S.orders * 100, O.units5 / O.orders * 100, p1, `${num(S.units5)} of ${num(S.orders)} vs ${num(O.units5)} of ${num(O.orders)}`) + '</div>';
-  const gaps = o.gaps || [], gmax = Math.max(1, ...gaps.map((g) => g.missed));
-  const rate = (x, n) => `${n ? (100 * x / n).toFixed(0) : 0}% <small>${num(x)}/${num(n)}</small>`;
-  const nm = (p) => p.handle ? `<a href="https://shop-ourkids.com/products/${encodeURIComponent(p.handle)}" target="_blank" rel="noopener" style="color:inherit">${esc(p.name)}</a>` : esc(p.name);
-  h += '<div class="card"><div class="hd"><h2>Biggest gaps: bought together in shops, rarely online</h2><span>sorted by missed baskets</span></div><table class="l2"><tr><th>When they buy</th><th>…they also buy</th><th>Shops</th><th>Online</th><th>Missed online baskets</th><th>In picks</th></tr>' +
-    (gaps.length ? gaps.map((g) => `<tr><td>${nm(g.a)}</td><td>${nm(g.b)}</td><td>${rate(g.shops_x, g.shops_n)}</td><td>${rate(g.online_x, g.online_n)}</td><td class="bar"><i style="width:${g.missed / gmax * 100}%"></i><span>${num(g.missed)}</span></td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">No gaps found.</td></tr>') +
-    `</table><div class="note">Missed online baskets = how many more online orders would have had both items if online matched the shops' rate (${esc(o.from)} – ${esc(o.to)}). A what-if from measured rates, not a forecast. Pairs need 8+ shared orders and 20+ orders with the first item in each channel.</div></div>`;
-  const cx = o.category, heat = (x, n) => { const r = n ? x / n : 0; return `style="background:rgba(66,109,179,${Math.min(0.55, r * 1.6).toFixed(2)})"`; };
-  const matrix = (lab, m) => `<div class="card"><div class="hd"><h2>${lab}: of orders with… how many also have…</h2></div><table><tr><th></th>${CATS.map((c) => `<th>${c === 'Baby Essentials' ? 'Baby' : c}</th>`).join('')}</tr>` +
-    CATS.map((A) => `<tr><td><b>${A === 'Baby Essentials' ? 'Baby' : A}</b> <small>${num(m[A].n)}</small></td>${CATS.map((B) => A === B ? '<td style="color:#ccc">–</td>' : `<td ${heat(m[A][B], m[A].n)}>${m[A].n ? (100 * m[A][B] / m[A].n).toFixed(1) : 0}%</td>`).join('')}</tr>`).join('') + '</table></div>';
-  h += `<div class="row2">${matrix('Shops', cx.shops)}${matrix('Online', cx.online)}</div>`;
-  const tp = o.pairs_top || [];
-  h += '<div class="row"><div class="card"><div class="hd"><h2>Most bought together</h2><span>shops + online</span></div><table><tr><th>Pair</th><th>Orders together</th><th>× more likely</th><th>In picks</th></tr>' +
-    tp.map((g) => `<tr><td>${nm(g.a)} <small>+</small> ${nm(g.b)}${g.a.name === g.b.name ? ' <small>(other colour)</small>' : ''}</td><td>${num(g.together)}</td><td>${g.lift}×</td><td>${g.live ? '<span class="chip">live</span>' : '<span class="chip off">not yet</span>'}</td></tr>`).join('') +
-    '</table><div class="note">× more likely = how much more often the second item is in an order with the first than in orders overall.</div></div>';
-  const top = (lab, a) => `<h2 style="margin:4px 0 8px">${lab}</h2><table><tr><th>Product</th><th>Orders</th></tr>${a.slice(0, 10).map((x) => `<tr><td>${nm(x)}</td><td>${num(x.orders)} <small>${(100 * x.orders / x.of).toFixed(1)}%</small></td></tr>`).join('')}</table>`;
-  h += `<div class="card"><div class="hd"><h2>Most frequent purchases</h2><span>share of orders</span></div>${top('Shops', o.top_products.shops)}<div style="height:14px"></div>${top('Online', o.top_products.online)}</div></div>`;
-  app.innerHTML = h;
+
+/* ONE source for every cross-sell number on every page: the saved rows for days before today + today's orders read live.
+   (Before 24 Nov the Overview and the A/B page added these up differently and showed two totals for the same thing.) */
+function xsAgg(S, from) {
+  const O = S.online?.jsonValue, t = today(), P = {}, daily = {};
+  const add = (src, k, v) => { (P[src] ||= { views: 0, clicks: 0, adds: 0, orders: 0, units: 0, rev: 0 })[k] += v || 0; };
+  for (const r of (O?.rows || [])) if (r.d >= from && r.d <= t) {
+    add(r.src, 'views', r.views); add(r.src, 'clicks', r.clicks); add(r.src, 'adds', r.adds);
+    if (r.d < t) { add(r.src, 'orders', r.orders); add(r.src, 'units', r.units); add(r.src, 'rev', r.rev); daily[r.d] = (daily[r.d] || 0) + r.rev; } }
+  for (const [src, x] of Object.entries(S.xs?.by || {})) { add(src, 'orders', x.orders); add(src, 'units', x.units); add(src, 'rev', x.rev); daily[t] = (daily[t] || 0) + x.rev; }
+  const X = { views: 0, clicks: 0, adds: 0, orders: 0, units: 0, rev: 0 }; for (const x of Object.values(P)) for (const k in X) X[k] += x[k];
+  /* order count across placements: an order with two placements counts once */
+  const cd = (iso) => new Date(Date.parse(iso) + 2 * 3600e3).toISOString().slice(0, 10);
+  const lines = [...(O?.lines || []).filter((l) => cd(l[1]) >= from && cd(l[1]) < t), ...(S.xs?.lines || []).filter((l) => cd(l[1]) >= t)];
+  X.orders = new Set(lines.map((l) => l[0])).size || X.orders;
+  /* GA4 visits: all / saw a tile / added one. GA4 cannot split visits by test group, so B's visits = half of all (50/50 test). */
+  const V = (O?.visits || []).filter((v) => v.d >= from && v.d <= t).reduce((a, v) => ({ all: a.all + v.all, seen: a.seen + v.seen, added: a.added + v.added }), { all: 0, seen: 0, added: 0 });
+  const byO = {}; for (const l of lines) (byO[l[6]] ||= new Set()).add(l[0]); for (const s in P) P[s].ord = byO[s]?.size ?? P[s].orders;
+  return { P, X, V, daily, lines, ga4_at: O?.ga4_at || O?.at, liveToday: !!S.xs };
 }
+const fromOf = (S) => S.A?.rollout ? S.A.start : (S.online?.jsonValue?.start || today());
+
+/* product photos for titles / handles (one Shopify call, cached) */
+const PH = {};
+async function photos(titles) {
+  const need = [...new Set(titles)].filter((t) => t && !(t in PH)).slice(0, 25); if (!need.length) return;
+  const q = 'query(' + need.map((_, i) => `$q${i}: String!`).join(', ') + ') {' + need.map((_, i) => `p${i}: products(first: 1, query: $q${i}) { nodes { handle legacyResourceId featuredMedia { preview { image { url(transform: { maxWidth: 120 }) } } } } }`).join(' ') + '}';
+  const v = Object.fromEntries(need.map((t, i) => [`q${i}`, /^[a-z0-9-]+$/.test(t) ? `handle:${t}` : `title:"${t.replace(/"/g, '\\"')}"`]));
+  try { const r = await AQ(q, v); need.forEach((t, i) => { const n = r[`p${i}`]?.nodes?.[0]; PH[t] = n ? { img: n.featuredMedia?.preview?.image?.url, handle: n.handle, id: n.legacyResourceId } : null; }); }
+  catch (e) { need.forEach((t) => { PH[t] = null; }); }
+}
+const prod = (t, sub = '') => { const p = PH[t]; const name = /^[a-z0-9-]+$/.test(t) ? pretty(t) : esc(t);
+  return `<div class="prod">${p?.img ? `<img src="${esc(p.img)}" alt="">` : '<span class="noimg"></span>'}<div>${p?.id ? `<a href="shopify://admin/products/${p.id}" target="_top">${name}</a>` : name}${sub ? `<div class="ts">${sub}</div>` : ''}</div></div>`; };
+let photoAsk = 0;
+function withPhotos(keys) { const missing = keys.filter((t) => t && !(t in PH)); if (!missing.length) return; const n = ++photoAsk; photos(missing).then(() => { if (n === photoAsk && last) show(last); }); }
+
+function barChart(id, labels, vals, fmt) {
+  charts.push(new Chart(document.getElementById(id), { type: 'bar', data: { labels, datasets: [{ data: vals, backgroundColor: [PURPLE, PINK], borderRadius: 4, maxBarThickness: 46 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.y) } } },
+      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: (v) => fmt(v), maxTicksLimit: 5 } } } } }));
+}
+
+/* ---------- Overview ---------- */
+function pgOverview(d, app) {
+  const S = d.sh || {}, g = groupsOf(S), from = fromOf(S), { P, X, V, daily, ga4_at } = xsAgg(S, from);
+  const T = g?.T, srcs = Object.keys(P).sort((a, b) => P[b].rev - P[a].rev || P[b].views - P[a].views);
+  const ab = g?.running ? abSummary(g, S) : null;
+  let h = header('Odoo Cross Sells', `Add-ons picked from Odoo baskets · since the test started ${dshort(from)} · shown to the Test group only`, `<s-button onclick="exportOnline()">Export</s-button>`) + nav();
+  h += `<div class="g4">${tile('Cross-sell revenue', egp(X.rev), T ? `${pct(X.rev, T.rev)} of B’s revenue (${egp(T.rev)})` : '')}${tile('Attach rate', T ? pct(X.orders, T.orders) : '–', T ? `B orders that include a cross-sell item: ${num(X.orders)} of ${num(T.orders)}` : '')}${tile('Items sold from tiles', num(X.units), T ? `${pct(X.units, T.units)} of B’s ${num(T.units)} items` : '')}${tile('Revenue per 1,000 tiles seen', X.views ? egp(X.rev / X.views * 1000) : '–', `${num(X.views)} tiles seen`)}</div>`;
+  h += `<div class="g4">${tile('Visits that saw a tile', V.all ? pct(V.seen, V.all / 2) : '–', V.all ? `${num(V.seen)} of ≈${num(V.all / 2)} B visits (GA4)` : 'GA4 visits arrive with the next refresh')}${tile('Click rate', pct(X.clicks, X.views), `tiles clicked ÷ tiles seen: ${num(X.clicks)} of ${num(X.views)}`)}${tile('Take rate', pct(X.adds, X.views, 2), `tiles added to cart ÷ tiles seen: ${num(X.adds)} of ${num(X.views)}`)}${tile('Added → bought', pct(X.units, X.adds), `${num(X.units)} of ${num(X.adds)} added items were bought`)}</div>`;
+  if (ab) h += card('A/B test', `<div class="abs"><div><div class="row"><b>${esc(ab.name)}</b> <s-badge tone="info">Running</s-badge> <s-badge>${ab.verdict}</s-badge></div>
+      <div class="ts">Day ${ab.day} of ${ab.of} · ${num(ab.sessions)} visitors · goal: ${ab.goal}</div>
+      <div class="g3 mt">${tile('Improvement', chg(ab.up))}${tile('Confidence B is better', ab.win, 'call it at 95%')}${tile('Orders so far', `${num(ab.orders)}`, ab.need)}</div>${trustBar(trust(S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'rps', g), ab.goal)}</div>
+      <div class="cta"><s-button variant="primary" onclick="go('ab')">View results</s-button></div></div>`);
+  const F = [['Seen', X.views], ['Clicked', X.clicks], ['Added to cart', X.adds], ['Sold', X.units]], fmax = Math.max(1, ...F.map((x) => x[1]));
+  h += `<div class="g2">` + card('From tile to sale', `<div class="funnel">${F.map((x, i) => `<div class="fr"><span>${x[0]}</span><div class="ftrack"><i style="width:${Math.max(0.8, x[1] / fmax * 100)}%;opacity:${1 - i * 0.2}"></i></div><b>${num(x[1])}</b><em>${i ? pct(x[1], F[i - 1][1]) : ''}</em></div>`).join('')}</div>
+      <div class="ts mt">Seen → clicked ${pct(X.clicks, X.views)} · clicked → added ${pct(X.adds, X.clicks)} · added → sold ${pct(X.units, X.adds)}</div>`, `<s-text tone="subdued">tiles seen and clicks: GA4${ga4_at ? ', ' + tstamp(ga4_at) : ''}</s-text>`)
+    + card('Cross-sell revenue per day', Object.keys(daily).length ? '<div class="chart"><canvas id="c1"></canvas></div>' : empty('No cross-sell sales yet.')) + '</div>';
+  h += card('Placements', placeTable(P, X, T), '<s-text tone="subdued">click a placement for its products and orders</s-text>');
+  h += how('Cross-sell revenue = order lines added from one of our tiles (hidden line tag _okb), web orders placed since the test started, today read live from Shopify. Refunds are not deducted. Tiles seen / clicks / adds come from GA4 (refreshed every 3 hours; GA4 itself runs a few hours behind). Only the Test group sees the tiles, so shares are of Test-group revenue and orders.');
+  app.innerHTML = `<div class="wrap">${h}</div>`;
+  const days = Object.keys(daily).sort();
+  if (days.length) charts.push(new Chart(document.getElementById('c1'), { type: 'bar', data: { labels: days.map(dshort), datasets: [{ label: 'Cross-sell revenue', data: days.map((x) => daily[x]), backgroundColor: PINK, borderRadius: 4, maxBarThickness: 60 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => egp(c.parsed.y) } } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: (v) => num(v), maxTicksLimit: 5 } } } } }));
+}
+
+function placeTable(P, X, T) {
+  const srcs = Object.keys(P).sort((a, b) => P[b].rev - P[a].rev || P[b].views - P[a].views);
+  if (!srcs.length) return empty('Nothing recorded yet.');
+  const H = (t, n) => `<th class="${n ? 'n' : ''}">${t}</th>`;
+  return `<div class="tw"><table class="pt"><thead><tr>${H('Placement')}${H('Seen', 1)}${H('% of tiles seen', 1)}${H('Click rate', 1)}${H('Take rate', 1)}${H('Orders', 1)}${H('Attach rate', 1)}${H('Revenue', 1)}${H('% of cross-sell revenue', 1)}${H('Per 1,000 seen', 1)}</tr></thead><tbody>` +
+    srcs.map((s) => { const x = P[s]; return `<tr onclick="drill('${s}')"><td><b>${esc(PLACE[s]?.[0] || s)}</b> <span class="chev">›</span><div class="ts">${esc(PLACE[s]?.[1] || '')}</div></td><td class="n">${num(x.views)}</td><td class="n">${pct(x.views, X.views)}</td><td class="n">${pct(x.clicks, x.views)}</td><td class="n">${pct(x.adds, x.views, 2)}</td><td class="n">${num(x.ord)}</td><td class="n">${T ? pct(x.ord, T.orders) : '–'}</td><td class="n">${egp(x.rev)}</td><td class="n"><div class="share"><i style="width:${X.rev ? 100 * x.rev / X.rev : 0}%"></i></div>${pct(x.rev, X.rev)}</td><td class="n">${x.views ? egp(x.rev / x.views * 1000) : '–'}</td></tr>`; }).join('') +
+    `<tr class="tot"><td><b>All placements</b></td><td class="n">${num(X.views)}</td><td class="n">100%</td><td class="n">${pct(X.clicks, X.views)}</td><td class="n">${pct(X.adds, X.views, 2)}</td><td class="n">${num(X.orders)}</td><td class="n">${T ? pct(X.orders, T.orders) : '–'}</td><td class="n">${egp(X.rev)}</td><td class="n">100%</td><td class="n">${X.views ? egp(X.rev / X.views * 1000) : '–'}</td></tr></tbody></table></div>
+    <div class="ts mt">Take rate = added to cart ÷ tiles seen · Attach rate = share of B orders with an item from this placement</div>`;
+}
+let place = new URLSearchParams(location.search).get('src') || null;
+function drill(s) { place = s; page = 'placements'; view = 'placements'; history.pushState(null, '', '?p=placements' + (s ? '&src=' + s : '')); window.scrollTo(0, 0); if (last) show(last); }
+const PREVIEW = 'https://shop-ourkids.com/?preview_theme_id=156358639795';
+const PV = (h) => `https://shop-ourkids.com/products/${h}?preview_theme_id=156358639795`;
+const SHOT = {   /* what shoppers in B see (captured from the Test theme, 24 Nov) + a live preview to try it */
+  pick: ['img/pick.jpg', PV('14103-grey-long-sleeved-thermal-set-1'), 'Any product page, under Add to cart'],
+  best: ['img/best.jpg', PV('14103-grey-long-sleeved-thermal-set-1'), 'Any product page, further down'],
+  drawer: ['img/drawer.jpg', PV('14103-grey-long-sleeved-thermal-set-1'), 'Add anything to cart, the drawer opens'],
+  near: ['img/near.jpg', PV('4761-09-thermal-set'), 'Pick a sold-out size (here 3-4y)'] };
+const shotCard = (s) => `<div class="shot"><div class="row"><b>${PLACE[s][0]}</b><span class="sp"></span><s-button href="${SHOT[s][1]}" target="_blank" variant="tertiary">Try it live ↗</s-button></div><div class="ts">${SHOT[s][2]}</div><img src="${SHOT[s][0]}" alt="${PLACE[s][0]} as shoppers see it" loading="lazy"></div>`;
+/* ---------- Cross sells: placements, products, orders ---------- */
+function pgPlacements(d, app) {
+  const S = d.sh || {}, from = fromOf(S), all = xsAgg(S, from), { P } = all, O = S.online?.jsonValue, T = groupsOf(S)?.T;
+  const lines = place ? all.lines.filter((l) => l[6] === place) : all.lines, X = place ? { ...(P[place] || {}), orders: P[place]?.ord || 0 } : all.X;
+  const byT = {}; for (const l of lines) { const x = byT[l[3]] ||= { title: l[3], orders: new Set(), units: 0, rev: 0, src: {} }; x.orders.add(l[0]); x.units += l[4]; x.rev += l[5]; x.src[l[6]] = 1; }
+  const top = Object.values(byT).sort((a, b) => b.rev - a.rev).slice(0, 12);
+  const span = Math.round((Date.parse(today()) - Date.parse(from)) / 864e5) + 1, seen = (O?.tops?.[String([7, 14, 30, 60].find((n) => n >= span) || 60)]?.seen || []).slice(0, 10);
+  const ords = {}; for (const l of lines) { const o = ords[l[0]] ||= { name: l[0], ts: l[1], total: l[2], items: [] }; o.items.push(l); }
+  const recent = Object.values(ords).sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 15);
+  withPhotos([...top.map((x) => x.title), ...seen.map((x) => x.handle), ...recent.flatMap((o) => o.items.map((l) => l[3])), ...all.lines.map((l) => l[3])]);
+  const pname = place ? `Showing only ${PLACE[place]?.[0] || place}` : 'Showing all 4 placements together';
+  let h = header('Cross sells', `${esc(pname)} · since the test started ${dshort(from)}`, `<s-button href="${PREVIEW}" target="_blank">View on store</s-button><s-button onclick="exportOnline()">Export</s-button>`) + nav();
+  h += '<div class="g5">' + [null, ...Object.keys(PLACE).filter((s) => P[s] || ['pick', 'best', 'drawer', 'near'].includes(s)).slice(0, 4)].map((s) => { const x = s ? (P[s] || { views: 0, clicks: 0, adds: 0, ord: 0, rev: 0 }) : { ...all.X, ord: all.X.orders };
+    return `<div class="tile pick${place === s ? ' on' : ''}" onclick="drill(${s ? `'${s}'` : 'null'})"><b>${s ? PLACE[s][0] : 'Total, all 4 together'}</b>${s ? '' : '<div class="ts">click a box to see only that one</div>'}
+      <div class="tv">${egp(x.rev)}</div><div class="ts">${pct(x.rev, all.X.rev)} of cross-sell revenue</div><div class="ts">${num(x.ord)} orders${T ? ` · ${pct(x.ord, T.orders)} attach` : ''} · ${pct(x.adds, x.views, 2)} take</div></div>`; }).join('') + '</div>';
+  h += card(place ? 'What shoppers see' : 'What shoppers see in B', place && SHOT[place] ? `<div class="shots one">${shotCard(place)}</div>` : `<div class="shots">${['pick', 'best', 'drawer', 'near'].map(shotCard).join('')}</div>`, '<s-text tone="subdued">the Control group sees none of these</s-text>');
+  h += `<div class="g4">${tile('Tiles seen', num(X.views), `${pct(X.views, all.X.views)} of all tiles seen`)}${tile('Click rate', pct(X.clicks, X.views), `tiles clicked ÷ tiles seen · ${num(X.clicks)} clicks`)}${tile('Take rate', pct(X.adds, X.views, 2), `tiles added to cart ÷ tiles seen · ${num(X.adds)} added`)}${tile('Attach rate', T ? pct(X.orders, T.orders) : '–', T ? `B orders with a cross-sell item · ${num(X.orders)} of ${num(T.orders)}` : '')}</div>`;
+  const SB = O?.seen_by || {}, sbOf = (t) => SB[PH[t]?.handle] || null;
+  h += card('Best-selling cross sells', top.length ? `<div class="tw"><table class="pt"><thead><tr><th>Product</th><th class="n">Times shown</th><th class="n">Clicks</th><th class="n">Click rate</th><th class="n">Orders</th><th class="n">Units</th><th class="n">Sold per 1,000 shown</th><th class="n">Revenue</th></tr></thead><tbody>${top.map((x) => { const sb = sbOf(x.title);
+      return `<tr class="nc"><td>${prod(x.title, Object.keys(x.src).map((s) => PLACE[s]?.[0] || s).join(', '))}</td><td class="n">${sb ? num(sb[0]) : '–'}</td><td class="n">${sb ? num(sb[1]) : '–'}</td><td class="n">${sb ? pct(sb[1], sb[0]) : '–'}</td><td class="n">${num(x.orders.size)}</td><td class="n">${num(x.units)}</td><td class="n">${sb && sb[0] ? (x.units / sb[0] * 1000).toFixed(1) : '–'}</td><td class="n">${egp(x.rev)}</td></tr>`; }).join('')}</tbody></table></div><div class="ts mt">Times shown = how often the product appeared in a tile since the test started, all placements (GA4). – = shown too rarely to be in GA4’s top 500.</div>` : empty('No cross-sell sales yet.'), `<s-text tone="subdued">${num(X.units)} items · ${egp(X.rev)}</s-text>`);
+  const soldH = {}; for (const l of all.lines) { const hd = PH[l[3]]?.handle; if (hd) { const z = soldH[hd] ||= { u: 0, r: 0 }; z.u += l[4]; z.r += l[5]; } }
+  h += card('Most shown', seen.length ? `<div class="tw"><table class="pt"><thead><tr><th>Product</th><th class="n">Shown</th><th class="n">Clicks</th><th class="n">Click rate</th><th class="n">Sold from tiles</th><th class="n">Sold per 1,000 shown</th><th class="n">Revenue</th></tr></thead><tbody>${seen.map((x) => { const z = soldH[x.handle];
+      return `<tr class="nc"><td>${prod(x.handle)}</td><td class="n">${num(x.views)}</td><td class="n">${num(x.clicks)}</td><td class="n">${pct(x.clicks, x.views)}</td><td class="n">${z ? num(z.u) : 0}</td><td class="n">${z ? (z.u / x.views * 1000).toFixed(1) : '0.0'}</td><td class="n">${z ? egp(z.r) : '–'}</td></tr>`; }).join('')}</tbody></table></div><div class="ts mt">Take rate per product (added ÷ shown) starts once GA4 keeps the product on each add (not switched on yet).</div>` : empty('No tiles seen yet.'), `<s-text tone="subdued">${place ? 'all placements (GA4 does not split products by placement)' : 'GA4, every 3 hours'}</s-text>`);
+  h += card('Orders with a cross sell', recent.length ? `<s-table><s-table-header-row><s-table-header>Order</s-table-header><s-table-header>Added from a tile</s-table-header><s-table-header>Placement</s-table-header><s-table-header format="numeric">Item value</s-table-header><s-table-header format="numeric">Order total</s-table-header></s-table-header-row><s-table-body>${recent.map((o) => `<s-table-row><s-table-cell><a href="shopify://admin/orders?query=${encodeURIComponent(o.name.replace('#', ''))}" target="_top"><b>${esc(o.name)}</b></a><div class="ts">${tstamp(o.ts)}</div></s-table-cell><s-table-cell>${o.items.map((l) => prod(l[3], `× ${l[4]}`)).join('')}</s-table-cell><s-table-cell>${[...new Set(o.items.map((l) => l[6]))].map((s) => `<s-badge>${esc(PLACE[s]?.[0] || s)}</s-badge>`).join(' ')}</s-table-cell><s-table-cell>${egp(o.items.reduce((a, l) => a + l[5], 0))}</s-table-cell><s-table-cell>${egp(o.total)}</s-table-cell></s-table-row>`).join('')}</s-table-body></s-table>` : empty('No orders with a cross sell yet.'), `<s-text tone="subdued">${num(X.orders)} orders · latest 15</s-text>`);
+  h += how('An item counts when it was added from one of our tiles (it carries the hidden tag _okb on the order line). No time window, no view-through credit. Web orders only; refunds and cancellations are not deducted. Today’s orders are read live from Shopify; earlier days come from the job. Tiles seen and clicks: GA4 list events okb_&lt;placement&gt;, theme previews not counted.');
+  app.innerHTML = `<div class="wrap">${h}</div>`;
+}
+
+/* ---------- A/B test (Essential A/B layout) ---------- */
+const chanceTxt = (p) => p > 99.4 ? '>99%' : p < 0.6 ? '<1%' : p.toFixed(0) + '%';
+function needFor(k, g) {      /* orders still needed to confirm a difference of the size seen so far (80% power) */
+  const c = cmp(k, g.T, g.C); if (!c) return null; const se = Math.sqrt(val(k, g.T).se ** 2 + val(k, g.C).se ** 2), z = Math.abs(c.d) / (se || 1e-9);
+  const have = g.T.orders + g.C.orders, need = z > 0.05 ? have * (2.8 / z) ** 2 : Infinity; return { have, need, z, c };
+}
+/* Intelligems-style reading: confidence = chance B is really better than A on the goal (call it at 95%),
+   days left = time until a gap this size would reach 95% (80% of the time), never before 2 full weeks of data. */
+function trust(k, g) {
+  const A = g.A, c = cmp(k, g.T, g.C), n = needFor(k, g), t0 = Date.parse(A.start), now = Date.parse(today());
+  const day = Math.max(1, Math.round((now - t0) / 864e5) + 1), end = Date.parse('2026-12-21'), leftTest = Math.round((end - now) / 864e5);
+  const perDay = (g.C.orders + g.T.orders) / day, minDays = Math.max(0, 14 - day);
+  let days = null, why = '';
+  if (!c) { days = Math.max(minDays, perDay ? Math.ceil((60 - g.C.orders - g.T.orders) / perDay) : 0); why = 'needs 30 orders a side first'; }
+  else if (c.pBeat >= 95 || c.pBeat <= 5) { days = minDays; why = minDays ? 'confident already; wait for 2 full weeks of data' : 'ready to call'; }
+  else if (n.need === Infinity || !perDay) { days = Infinity; why = 'no difference yet to confirm'; }
+  else { days = Math.max(minDays, Math.ceil(Math.max(0, n.need - n.have) / perDay)); why = `at today’s gap and ${num(perDay)} orders a day`; }
+  const conf = c ? Math.max(c.pBeat, 100 - c.pBeat) : null, lead = c ? (c.pBeat >= 50 ? 'B' : 'A') : null;
+  /* smallest lift the test can still confirm by its end date, at today's pace (the spread shrinks with more orders) */
+  let mde = null; if (c && perDay) { const have = g.C.orders + g.T.orders, atEnd = have + perDay * Math.max(0, leftTest), se = Math.sqrt(val(k, g.T).se ** 2 + val(k, g.C).se ** 2) * Math.sqrt(have / atEnd); mde = 2.8 * se / val(k, g.C).v * 100; }
+  if (days === Infinity || days > leftTest) why = mde ? `by 21 Dec it can only confirm a lift of ${mde.toFixed(0)}% or more; today’s gap is ${Math.abs(c.up).toFixed(1)}%` : why;
+  const when = days === Infinity || days > leftTest ? `more than the ${leftTest} days the test has left` : days === 0 ? 'now' : `about ${days} day${days > 1 ? 's' : ''} (${new Date(now + days * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})`;
+  const have = g.C.orders + g.T.orders, atEnd = Math.round(have + perDay * Math.max(0, leftTest));
+  const ordersTxt = !c ? `${num(have)} orders so far; a first reading needs 30 a side (${num(g.C.orders)} and ${num(g.T.orders)} now)`
+    : n.need === Infinity ? `${num(have)} orders so far; no gap yet, so no number of orders confirms it`
+    : `≈ ${num(n.need)} orders needed to trust today’s gap · ${num(have)} so far · ≈ ${num(atEnd)} by 21 Dec`;
+  return { c, conf, lead, days, when, why, day, ordersTxt };
+}
+const trustBar = (t, lab) => `<div class="trust"><div><div class="ts">Confidence ${t.lead ? `${t.lead} is better` : ''} · ${lab}</div><div class="tv">${t.conf == null ? '–' : t.conf.toFixed(0) + '%'} <span class="of">of 95% needed</span></div>
+  <div class="prog"><i style="width:${t.conf == null ? 0 : Math.min(100, t.conf / 95 * 100).toFixed(0)}%;background:${t.conf >= 95 ? '#0c5132' : '#303030'}"></i></div></div>
+  <div><div class="ts">Time left until it can be trusted</div><div class="tv">${t.when}</div><div class="ts">${t.why}</div></div>
+  <div class="ordn"><b>Orders needed</b> · ${t.ordersTxt}</div></div>`;
+function abSummary(g, S) {
+  const A = g.A, goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'rps', c = cmp(goal, g.T, g.C), n = needFor(goal, g);
+  const day = Math.max(1, Math.round((Date.parse(today()) - Date.parse(A.start)) / 864e5) + 1);
+  const verdict = !c ? 'Collecting data' : c.lo > 0 ? 'Test is winning' : c.hi < 0 ? 'Test is losing' : 'Too early to call';
+  return { name: 'Cross sells vs none', day, of: 28, sessions: g.T.sessions + g.C.sessions, goal: GOALS[goal].lab, up: c ? c.up : null, win: c ? chanceTxt(c.pBeat) : '–', orders: g.T.orders + g.C.orders, verdict,
+    need: n ? (n.need === Infinity || n.need > 50 * n.have ? 'difference too small to confirm' : n.need <= n.have ? 'enough to call it' : `≈ ${num(n.need - n.have)} more to confirm`) : 'needs 30 a side' };
+}
+function pgAB(d, app) {
+  const S = d.sh || {}, g = groupsOf(S);
+  if (!g) { app.innerHTML = `<div class="wrap">${header('A/B test', '')}${nav()}${card('', empty(loading ? 'Loading the test from Shopify…' : 'No test numbers yet.'))}</div>`; return; }
+  const { A, C, T, running } = g, goal = S.goal?.value && GOALS[S.goal.value] ? S.goal.value : 'rps', k = metric && GOALS[metric] ? metric : goal;
+  const arms = running ? [[C, 'A', 'Original', 'Live theme, no cross sells'], [T, 'B', 'With cross sells', 'Basket builders theme']] : [[C, 'A', 'All shoppers', 'No test running']];
+  const c = running ? cmp(k, T, C) : null, n = running ? needFor(k, g) : null;
+  const day = Math.max(1, Math.round((Date.parse(today()) - Date.parse(A.start)) / 864e5) + 1), perDay = (C.orders + (T?.orders || 0)) / day;
+  const status = running ? (A.rollout.status === 'ACTIVE' ? '<s-badge tone="info">Running</s-badge>' : `<s-badge>${esc(A.rollout.status.toLowerCase())}</s-badge>`) : '<s-badge>Not running</s-badge>';
+  const verdict = !c ? '<s-badge>Collecting data</s-badge>' : c.lo > 0 ? '<s-badge tone="success">Test is winning</s-badge>' : c.hi < 0 ? '<s-badge tone="critical">Test is losing</s-badge>' : '<s-badge tone="warning">Too early to call</s-badge>';
+  let h = header(`Cross sells vs none ${status} ${verdict}`, `${fdate(A.start)} – 21 Dec 2026 · 50% / 50% · Cairo time · ${liveNote(A)}`, `<s-button onclick="load()">Refresh</s-button><s-button onclick="exportAB()">Export</s-button>`) + nav();
+  /* variant cards */
+  if (running) h += `<div class="g2">${arms.map(([x, L, name, sub], i) => `<section class="card var"><div class="row"><span class="vdot" style="background:${i ? PINK : PURPLE}"></span><b>${L} ${name} – ${x.split}%</b><span class="sp"></span>${c && (i ? c.lo > 0 : c.hi < 0) ? '<s-badge tone="success">Winner</s-badge>' : ''}</div><div class="ts">${sub}</div>
+      <ul class="sees">${i ? '<li>3 picks under Add to cart, in the shopper’s size</li><li>Best-seller tabs on the product page</li><li>Add-ons in the cart drawer</li><li>Closest in-stock match when a size is sold out</li>' : '<li>Today’s live site, unchanged</li><li>No add-on tiles anywhere</li>'}</ul></section>`).join('')}</div>`;
+  /* analytics header + 4 tiles */
+  const opts = Object.entries(GOALS).map(([kk, gg]) => `<option value="${kk}" ${kk === k ? 'selected' : ''}>${gg.lab}${kk === goal ? ' (test goal)' : ''}</option>`).join('');
+  h += `<div class="ah"><h2>Analytics</h2><span class="sp"></span>${k !== goal && running ? `<s-button variant="tertiary" onclick="setGoal('${k}')">Make this the test goal</s-button>` : ''}<select class="sel" onchange="metric=this.value;show(last)">${opts}</select></div>`;
+  h += `<div class="g4">${tile('Total visitors', num(C.sessions + (T?.sessions || 0)))}${tile('Test duration', `Day ${day} <span class="of">of 28</span>`)}${tile('Improvement', c ? chg(c.up) : '<span class="muted">–</span>', GOALS[k].lab)}${tile('Confidence B is better', c ? chanceTxt(c.pBeat) : '–', 'call it at 95% (or 5%: A is better)')}</div>`;
+  /* progress to a verdict */
+  if (running) {
+    const have = C.orders + T.orders, need = !n ? 60 : Math.min(n.need, have * 50), done = !n ? Math.min(1, Math.min(C.orders, T.orders) / 30) : Math.min(1, have / need);
+    const eta = n && n.need !== Infinity && n.need > have && perDay ? Math.ceil((n.need - have) / perDay) : null;
+    const msg = !n ? `Needs 30 orders on each side before any reading (${num(C.orders)} and ${num(T.orders)} so far).`
+      : n.need <= have ? 'Enough orders to call this difference.' : n.need > 50 * have ? `The difference so far is too small to confirm in this test. ${num(have)} orders so far.`
+      : `About ${num(n.need)} orders needed to confirm a difference this size · ${num(have)} so far${eta ? ` · about ${eta} more days at today’s pace` : ''}.`;
+    h += `<section class="card">${trustBar(trust(k, g), GOALS[k].lab)}<div class="ts mt">${msg}</div>
+      ${c && c.lo < 0 && c.hi > 0 ? `<div class="warnb">⚠ Too early to call: B could still be anywhere from ${c.lo.toFixed(0)}% to +${c.hi.toFixed(0)}% on ${GOALS[k].lab.toLowerCase()}.</div>` : ''}</section>`;
+  }
+  /* variant table */
+  h += `<section class="card tight"><s-table><s-table-header-row><s-table-header>Variant · confidence</s-table-header><s-table-header format="numeric">Visitors</s-table-header><s-table-header format="numeric">Add to carts</s-table-header><s-table-header format="numeric">ATC rate</s-table-header><s-table-header format="numeric">Checkouts</s-table-header><s-table-header format="numeric">Orders</s-table-header><s-table-header format="numeric">Conversion rate</s-table-header><s-table-header format="numeric">Revenue</s-table-header><s-table-header format="numeric">RPV</s-table-header><s-table-header format="numeric">AOV</s-table-header><s-table-header format="numeric">Items / order</s-table-header></s-table-header-row><s-table-body>` +
+    arms.map(([x, L, name], i) => `<s-table-row><s-table-cell><b>${L} – ${name}</b> ${c ? `<s-badge>${chanceTxt(i ? c.pBeat : 100 - c.pBeat)}</s-badge>` : ''}</s-table-cell><s-table-cell>${num(x.sessions)}</s-table-cell><s-table-cell>${num(x.atc)}</s-table-cell><s-table-cell>${pct(x.atc, x.sessions, 2)}</s-table-cell><s-table-cell>${num(x.co)}</s-table-cell><s-table-cell>${num(x.orders)}</s-table-cell><s-table-cell>${pct(x.conv, x.sessions, 2)}</s-table-cell><s-table-cell>${egp(x.rev)}</s-table-cell><s-table-cell>${x.sessions ? 'EGP ' + (x.rev / x.sessions).toFixed(2) : '–'}</s-table-cell><s-table-cell>${x.orders ? egp(x.rev / x.orders) : '–'}</s-table-cell><s-table-cell>${x.orders ? (x.units / x.orders).toFixed(2) : '–'}</s-table-cell></s-table-row>`).join('') + '</s-table-body></s-table></section>';
+  /* metric cards: goal first, then the rest */
+  const keys = [goal, ...['cvr', 'atc', 'aov', 'upt', 'multi', 'checkout', 'aov_capped', 'cloth_toy', 'rps'].filter((x) => x !== goal)].slice(0, 9);
+  h += '<div class="g3">' + keys.map((kk, i) => { const cc = running ? cmp(kk, T, C) : null;
+    return `<section class="card mc${kk === k ? ' sel' : ''}" onclick="metric='${kk}';show(last)"><div class="row"><span>${GOALS[kk].lab}</span><span class="sp"></span>${kk === goal ? '<s-badge tone="info">Test goal</s-badge>' : ''}</div>
+      <div class="mv">${cc ? chg(cc.up) : `<span class="muted" style="font-size:14px">${running ? 'needs 30 orders a side' : '–'}</span>`}</div>${cc ? `<div class="ts">confidence B is better: ${chanceTxt(cc.pBeat)}</div>` : '<div class="ts">&nbsp;</div>'}<div class="mchart"><canvas id="m${i}"></canvas></div></section>`; }).join('') + '</div>';
+  /* baskets */
+  const cats = [...new Set(arms.flatMap(([x]) => Object.keys(x.mix || {})))], tots = arms.map(([x]) => Object.values(x.mix || {}).reduce((a, b) => a + b, 0) || 1);
+  const crow = cats.map((cn) => [cn, arms.map(([x], i) => (x.mix?.[cn] || 0) / tots[i])]).sort((a, b) => b[1][0] - a[1][0]);
+  h += '<div class="g2">' + card('What baskets are made of', `<s-table><s-table-header-row><s-table-header>Category</s-table-header>${arms.map(([, L]) => `<s-table-header format="numeric">${L}</s-table-header>`).join('')}${running ? '<s-table-header format="numeric">B vs A</s-table-header>' : ''}</s-table-header-row><s-table-body>` +
+    crow.map(([cn, v]) => { const rel = running && v[0] ? (v[1] - v[0]) / v[0] * 100 : null; return `<s-table-row><s-table-cell>${esc(cn)}</s-table-cell>${v.map((p) => `<s-table-cell>${(100 * p).toFixed(1)}%</s-table-cell>`).join('')}${running ? `<s-table-cell>${rel == null ? '–' : chg(rel, 0)}</s-table-cell>` : ''}</s-table-row>`; }).join('') + '</s-table-body></s-table>', '<s-text tone="subdued">share of each group’s revenue</s-text>')
+    + card('Conversion rate by day', '<div class="chart"><canvas id="c2"></canvas></div>') + '</div>';
+  if (running) { const { X } = xsAgg(S, A.start);
+    h += card('What the cross sells did in B', `<div class="g4 flat">${tile('Cross-sell revenue', egp(X.rev), `${pct(X.rev, T.rev)} of B’s revenue`)}${tile('Orders with a cross sell', num(X.orders), `of ${num(T.orders)} B orders`)}${tile('Tiles seen', num(X.views), `${pct(X.clicks, X.views)} clicked`)}${tile('Added from tiles', num(X.adds), `${num(X.units)} sold`)}</div>`, `<s-button variant="tertiary" onclick="go('placements')">Details →</s-button>`); }
+  h += how(`Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts visitors (sessions), add to carts, checkouts and conversions per group. Orders, value, items and categories come from Shopify sales per order: only orders placed since the test started, valued at checkout incl. delivery; later returns are left out. Improvement = B vs A on the chosen metric. Confidence = how likely B is really better than A on that metric, from each group’s own spread (the same reading Intelligems shows as probability to beat control). A result is trusted at 95% (or 5%, meaning A is better) and after at least 2 full weeks, so weekdays and weekends are both in. Time left = how long until a gap of the size seen so far would reach 95%, 80% of the time, at today’s order pace; if the gap is tiny that is longer than the test. Gross profit is not shown: Export, and it is worked out from Odoo.`);
+  app.innerHTML = `<div class="wrap">${h}</div>`;
+  keys.forEach((kk, i) => { const vs = arms.map(([x]) => val(kk, x)), G = GOALS[kk]; const fmt = G.p ? (v) => (100 * v).toFixed(2) + '%' : kk === 'upt' ? (v) => (+v).toFixed(2) : (v) => 'EGP ' + (+v).toFixed(kk === 'rps' ? 2 : 0);
+    barChart('m' + i, arms.map(([, L, name]) => `${L} ${name}`), vs.map((v) => v ? v.v : 0), fmt); });
+  const days_ = [...new Set((S.dly || []).map((r) => r.day))].sort();
+  const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
+  charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: days_.map(dshort), datasets: arms.map(([x, L, name], i) => ({ label: `${L} ${name}`, data: series(x.id), borderColor: i ? PINK : PURPLE, backgroundColor: i ? PINK : PURPLE, tension: .3, spanGaps: true, pointRadius: 3 })) },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (cc) => `${cc.dataset.label}: ${cc.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (+v).toFixed(2) + '%', maxTicksLimit: 5 } } } } }));
+}
+
+/* ---------- Shops vs online (Odoo) ---------- */
+function pgOdoo(d, app) {
+  const o = d.odoo;
+  if (!o) { app.innerHTML = `<div class="wrap">${header('Shops vs online', '')}${nav()}${card('', empty('Odoo numbers arrive with the nightly job.'))}</div>`; return; }
+  const S = o.channels.shops, O = o.channels.online, p1 = (x) => x.toFixed(1) + '%';
+  const pair = (label, sv, ov, fmt, sub) => { const mx = Math.max(sv, ov) || 1, ch = sv ? (ov - sv) / sv * 100 : null;
+    return `<div class="tile"><s-text tone="subdued">${label}</s-text><div class="pb"><span>Shops</span><div class="ftrack"><i style="width:${sv / mx * 100}%;background:${PURPLE}"></i></div><b>${fmt(sv)}</b></div><div class="pb"><span>Online</span><div class="ftrack"><i style="width:${ov / mx * 100}%;background:${PINK}"></i></div><b>${fmt(ov)}</b></div><div class="ts">${ch == null ? '' : `online ${chg(ch, 0)} vs shops · `}${sub}</div></div>`; };
+  let h = header('Shops vs online', `Odoo orders ${esc(o.from)} – ${esc(o.to)} · ${num(S.orders)} shop orders vs ${num(O.orders)} online · updated ${tstamp(d.odoo_at)}`) + nav();
+  h += '<div class="g4">' + pair('AOV', S.aov, O.aov, egp, 'incl. VAT') + pair('Items per order', S.upt, O.upt, (x) => x.toFixed(2), 'units') + pair('Orders with 2+ different items', S.multi2 / S.orders * 100, O.multi2 / O.orders * 100, p1, `${num(S.multi2)} of ${num(S.orders)} vs ${num(O.multi2)} of ${num(O.orders)}`) + pair('Orders with 5+ units', S.units5 / S.orders * 100, O.units5 / O.orders * 100, p1, `${num(S.units5)} of ${num(S.orders)} vs ${num(O.units5)} of ${num(O.orders)}`) + '</div>';
+  const gaps = o.gaps || [], rate = (x, n) => `${n ? (100 * x / n).toFixed(0) : 0}% <span class="ts">${num(x)}/${num(n)}</span>`;
+  const nm = (p) => p.handle ? `<a href="https://shop-ourkids.com/products/${encodeURIComponent(p.handle)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name);
+  const live = (x) => x ? '<s-badge tone="success">In picks</s-badge>' : '<s-badge>Not yet</s-badge>';
+  h += card('Bought together in shops, rarely online', gaps.length ? `<s-table><s-table-header-row><s-table-header>When they buy</s-table-header><s-table-header>…they also buy</s-table-header><s-table-header format="numeric">Shops</s-table-header><s-table-header format="numeric">Online</s-table-header><s-table-header format="numeric">Missed online baskets</s-table-header><s-table-header>Picks</s-table-header></s-table-header-row><s-table-body>${gaps.map((x) => `<s-table-row><s-table-cell>${nm(x.a)}</s-table-cell><s-table-cell>${nm(x.b)}</s-table-cell><s-table-cell>${rate(x.shops_x, x.shops_n)}</s-table-cell><s-table-cell>${rate(x.online_x, x.online_n)}</s-table-cell><s-table-cell>${num(x.missed)}</s-table-cell><s-table-cell>${live(x.live)}</s-table-cell></s-table-row>`).join('')}</s-table-body></s-table>` : empty('No gaps found.'), '<s-text tone="subdued">sorted by missed baskets</s-text>');
+  const CT = ['Clothing', 'Toys', 'Baby Essentials', 'School', 'Party'], cx = o.category, sh = (c) => c === 'Baby Essentials' ? 'Baby' : c;
+  const heat = (x, n) => { const r = n ? x / n : 0; return `style="background:rgba(143,126,240,${Math.min(0.6, r * 1.8).toFixed(2)})"`; };
+  const matrix = (lab, m) => card(`${lab}: orders with… that also have…`, `<table class="mx"><tr><th></th>${CT.map((c) => `<th>${sh(c)}</th>`).join('')}</tr>${CT.map((a) => `<tr><td><b>${sh(a)}</b> <span class="ts">${num(m[a].n)}</span></td>${CT.map((b) => a === b ? '<td class="muted">–</td>' : `<td ${heat(m[a][b], m[a].n)}>${m[a].n ? (100 * m[a][b] / m[a].n).toFixed(1) : 0}%</td>`).join('')}</tr>`).join('')}</table>`);
+  h += `<div class="g2">${matrix('Shops', cx.shops)}${matrix('Online', cx.online)}</div>`;
+  const tp = o.pairs_top || [], top = (a) => `<s-table><s-table-header-row><s-table-header>Product</s-table-header><s-table-header format="numeric">Orders</s-table-header></s-table-header-row><s-table-body>${a.slice(0, 10).map((x) => `<s-table-row><s-table-cell>${nm(x)}</s-table-cell><s-table-cell>${num(x.orders)} <span class="ts">${(100 * x.orders / x.of).toFixed(1)}%</span></s-table-cell></s-table-row>`).join('')}</s-table-body></s-table>`;
+  h += `<div class="g2">${card('Most bought together', `<s-table><s-table-header-row><s-table-header>Pair</s-table-header><s-table-header format="numeric">Orders together</s-table-header><s-table-header format="numeric">× more likely</s-table-header><s-table-header>Picks</s-table-header></s-table-header-row><s-table-body>${tp.map((x) => `<s-table-row><s-table-cell>${nm(x.a)} + ${nm(x.b)}</s-table-cell><s-table-cell>${num(x.together)}</s-table-cell><s-table-cell>${x.lift}×</s-table-cell><s-table-cell>${live(x.live)}</s-table-cell></s-table-row>`).join('')}</s-table-body></s-table>`, '<s-text tone="subdued">shops + online</s-text>')}${card('Most frequent purchases', `<div class="sub">Shops</div>${top(o.top_products.shops)}<div class="sub mt">Online</div>${top(o.top_products.online)}`, '<s-text tone="subdued">share of orders</s-text>')}</div>`;
+  h += how('Straight from Odoo, refreshed nightly. Missed online baskets = how many more online orders would have had both items if online matched the shops’ rate: a what-if from measured rates, not a forecast. Pairs need 8+ shared orders and 20+ orders with the first item in each channel. × more likely = how much more often the second item is in an order with the first than in orders overall.');
+  app.innerHTML = `<div class="wrap">${h}</div>`;
+}
+
+/* ---------- exports (restored: the live page lost them in an earlier edit) ---------- */
+function csv(name, head, rows) {
+  const q = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const blob = new Blob(['﻿' + [head, ...rows].map((r) => r.map(q).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function exportAB() {
+  const A = last?.sh?.A; if (!A) return; const sesBy = Object.fromEntries(last.sh.ses.map((r) => [String(r.rollout_treatment_id), r]));
+  const lab = (id) => A.groups[id]?.label || id, tag = `${A.start}_${A.until}`;
+  csv(`cross-sell-ab-orders_${tag}.csv`, ['order', 'group', 'order_value_egp', 'units', 'categories'], (A.orders || []).map((o) => [o[0], lab(o[1]), o[2], o[3], o[4]]));
+  setTimeout(() => csv(`cross-sell-ab-metrics_${tag}.csv`, ['group', 'metric', 'value'], Object.entries(A.groups).flatMap(([id, g]) => { const r = sesBy[id] || {};
+    const x = { ...g, sessions: +r.sessions || 0, atc: +r.sessions_with_cart_additions || 0, co: +r.sessions_that_reached_checkout || 0, conv: +r.sessions_that_completed_checkout || 0 };
+    return [['sessions', x.sessions], ['added_to_cart', x.atc], ['reached_checkout', x.co], ['completed_checkout', x.conv], ['orders', x.orders], ['revenue_egp', x.rev], ['units', x.units], ['orders_2plus_categories', x.multi], ['clothing_orders', x.cloth], ['clothing_orders_with_toy', x.cloth_toy],
+      ...Object.entries(x.mix || {}).map(([c, v]) => ['revenue_' + c.toLowerCase().replace(/\W+/g, '_'), v])].map(([m, v]) => [g.label, m, v]); })), 400);
+}
+function exportOnline() {
+  const S = last?.sh; if (!S?.online?.jsonValue) return; const O = S.online.jsonValue, { lines } = xsAgg(S, O.start);
+  csv(`cross-sell-by-day_${O.start}.csv`, ['day', 'placement', 'tiles_seen', 'clicks', 'adds', 'orders', 'units', 'revenue_egp'], O.rows.map((r) => [r.d, r.src, r.views, r.clicks, r.adds, r.orders, r.units, r.rev]));
+  setTimeout(() => csv(`cross-sell-order-lines_${O.start}.csv`, ['order', 'time', 'order_total_egp', 'item', 'qty', 'item_value_egp', 'placement'], lines), 400);
+}
+
+/* first paint from the last visit while Shopify is read (no grey screen) */
+try { const c = JSON.parse(sessionStorage.getItem('okb_last') || 'null'); if (c && !c.shErr) { last = c; show(c); } } catch (e) { /* no cache */ }
 load();
+
 </script>
 </body>
 </html>
