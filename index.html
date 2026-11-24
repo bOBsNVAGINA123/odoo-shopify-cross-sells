@@ -95,7 +95,7 @@
 <main>
   <header>
     <div><h1>Odoo Cross Sells</h1><p>Add-ons picked from Odoo baskets, shown on product pages, best sellers and the cart</p></div>
-    <div class="seg" id="seg"><button data-d="7">7 days</button><button data-d="14" class="on">14 days</button><button data-d="30">30 days</button><button data-d="60">60 days</button></div>
+    <div class="seg" id="seg"><button data-d="start" class="on">Since test start</button><button data-d="7">7 days</button><button data-d="14">14 days</button><button data-d="30">30 days</button><button data-d="60">60 days</button></div>
   </header>
   <div class="seg tabs" id="tabs" style="margin-bottom:14px"><button data-v="online" class="on">Online cross sells</button><button data-v="ab">A/B test</button><button data-v="odoo">Shops vs online (Odoo)</button></div>
   <div id="app"><div class="msg">Loading…</div></div>
@@ -110,11 +110,12 @@ const pretty = (h) => esc(String(h).replace(/^\d[\w]*?-/, '').replace(/-/g, ' ')
 const tip = (t) => `<span class="i" title="${esc(t)}">i</span>`;
 function delta(cur, prev) {
   if (!prev && !cur) return '<span class="d flat">–</span>';
+  if (prev == null) return '';                                  /* no comparable earlier period (e.g. before the test) */
   if (!prev) return '<span class="d flat">new</span>';
   const ch = (cur - prev) / prev * 100, cls = Math.abs(ch) < 0.5 ? 'flat' : ch > 0 ? 'up' : 'down';
   return `<span class="d ${cls}">${ch > 0 ? '↑' : ch < 0 ? '↓' : ''}${Math.abs(ch).toFixed(1)}%</span>`;
 }
-let days = 14, charts = [], view = 'online', last = null;
+let days = 'start', charts = [], view = 'online', last = null;
 document.getElementById('tabs').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); view = b.dataset.v;
@@ -125,7 +126,7 @@ const show = (d) => { const err = d.shErr;
   ({ odoo: renderOdoo, ab: renderAB }[view] || render)(d); };
 document.getElementById('seg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); days = +b.dataset.d; if (last) show(last); /* all 60 days are loaded once; the window just re-cuts them */
+  [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b)); days = b.dataset.d === 'start' ? 'start' : +b.dataset.d; if (last) show(last); /* all 60 days are loaded once; the window just re-cuts them */
 });
 
 /* Shopify straight from the browser (direct API access, as the staff member who opened the app). */
@@ -368,35 +369,43 @@ function renderAB(d) {
 function onlineData(d) {
   const O = d.sh?.online?.jsonValue; if (!O) return null;
   const today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), back = (n) => new Date(Date.parse(today) - n * 864e5).toISOString().slice(0, 10);
-  const from = back(days - 1), pf = back(2 * days - 1), inW = (x) => x >= from && x <= today, inP = (x) => x >= pf && x < from;
+  /* a running test is where the data starts: windows never reach back before it, and there is no "previous period" to compare */
+  const A = d.sh?.A, S0 = A?.rollout ? A.start : null;
+  let from = days === 'start' ? (S0 || back(13)) : back(days - 1);
+  if (S0 && from < S0) from = S0;
+  const span = Math.round((Date.parse(today) - Date.parse(from)) / 864e5) + 1, pf = back(2 * span - 1);
+  const inW = (x) => x >= from && x <= today, inP = (x) => x >= pf && x < from, prevOk = !S0 && pf >= O.start;
   const sum = (rows, f, key) => rows.filter((r) => f(r.d)).reduce((a, r) => a + (r[key] || 0), 0);
-  const prevOk = pf >= O.start, k = {};
-  for (const key of ['views', 'clicks', 'adds', 'orders', 'units']) { k[key] = sum(O.rows, inW, key); k[key + '_prev'] = prevOk ? sum(O.rows, inP, key) : 0; }
-  k.revenue = sum(O.rows, inW, 'rev'); k.revenue_prev = prevOk ? sum(O.rows, inP, 'rev') : 0;
-  k.web_revenue = sum(O.days, inW, 'web_rev'); k.web_orders = sum(O.days, inW, 'web_orders');
+  const k = {};
+  for (const key of ['views', 'clicks', 'adds', 'orders', 'units']) { k[key] = sum(O.rows, inW, key); k[key + '_prev'] = prevOk ? sum(O.rows, inP, key) : null; }
+  k.revenue = sum(O.rows, inW, 'rev'); k.revenue_prev = prevOk ? sum(O.rows, inP, 'rev') : null;
+  /* only the Test group sees cross sells: compare against its own revenue and orders when the window is the whole test */
+  const T = S0 && from === S0 ? Object.values(A.groups || {}).find((g) => g.label === 'Test') : null;
+  k.web_revenue = T ? T.rev : sum(O.days, inW, 'web_rev'); k.web_orders = T ? T.orders : sum(O.days, inW, 'web_orders');
+  const base = T ? 'Test-group' : 'web';
   const srcs = [...new Set(O.rows.map((r) => r.src))];
   const sources = srcs.map((src) => { const rr = O.rows.filter((r) => r.src === src && inW(r.d)); return { src, views: rr.reduce((a, r) => a + r.views, 0), clicks: rr.reduce((a, r) => a + r.clicks, 0), adds: rr.reduce((a, r) => a + r.adds, 0), orders: rr.reduce((a, r) => a + r.orders, 0), units: rr.reduce((a, r) => a + r.units, 0), revenue: rr.reduce((a, r) => a + r.rev, 0) }; });
   const daily = O.days.filter((x) => inW(x.d)).map((x) => ({ day: x.d, web: x.web_rev, revenue: O.rows.filter((r) => r.d === x.d).reduce((a, r) => a + r.rev, 0) }));
-  const t = O.tops[String(days)] || O.tops['60'];
+  const t = O.tops[String([7, 14, 30, 60].find((n) => n >= span) || 60)] || O.tops['60'];
   return { kpi: k, sources, daily, from, to: today, top_sold: t.sold, top_recommended: t.seen, recent: O.recent.filter((r) => r.ts.slice(0, 10) >= from),
-    ga4: O.ga4, live: !!d.sh?.A?.rollout || k.orders > 0, at: O.at };
+    ga4: O.ga4, live: !!S0 || k.orders > 0, at: O.at, base };
 }
 function render(d0) {
   charts.forEach((c) => c.destroy()); charts = [];
   const d = onlineData(d0); if (!d) { document.getElementById('app').innerHTML = '<div class="card empty">Online numbers arrive with the nightly job.</div>'; return; }
   const k = d.kpi, src = (d.sources || []).slice().sort((a, b) => b.revenue - a.revenue || b.views - a.views);
   const card = (label, val, dl, sub, t) => `<div class="card kpi"><div class="l">${label} ${tip(t)}</div><b>${val}${dl}</b><small>${sub}</small></div>`;
-  const rpm = k.views ? k.revenue / k.views * 1000 : 0, rpmP = k.views_prev ? k.revenue_prev / k.views_prev * 1000 : 0;
+  const rpm = k.views ? k.revenue / k.views * 1000 : 0, rpmP = k.views_prev ? k.revenue_prev / k.views_prev * 1000 : null;
   const live = d.live, none = !live || (!k.views && !k.revenue && !k.units);
   let h = none ? `<div class="card" style="margin-bottom:14px;background:#eef3fb;box-shadow:none"><b>Not live yet.</b> No shopper sees the cross sells until the test (or the theme) goes live. Baseline in this period: <b>${egp(k.web_revenue / Math.max(1, k.web_orders))}</b> AOV across ${num(k.web_orders)} web orders.</div>` : '';
   if (!d.ga4) h += '<div class="card" style="margin-bottom:14px;background:#fff4d6;box-shadow:none">Tile views and clicks are not connected yet (GA4 key missing in the nightly job). Sales below are complete.</div>';
   h += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="mk" onclick="exportOnline()">Export all (CSV)</button></div>';
   h += '<div class="kpis">' +
-    card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of web revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
-    card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} web orders`, 'Web orders containing at least one item added from our tiles.') +
+    card('Cross-sell revenue', egp(k.revenue), delta(k.revenue, k.revenue_prev), `${pct(k.revenue, k.web_revenue)} of ${d.base} revenue`, 'Sum of order lines added from our tiles (line tag _okb), web orders, placed in the period. Refunds not deducted.') +
+    card('Orders with a cross sell', num(k.orders), delta(k.orders, k.orders_prev), `${pct(k.orders, k.web_orders)} of ${num(k.web_orders)} ${d.base} orders`, 'Web orders containing at least one item added from our tiles.') +
     card('Units added', num(k.units), delta(k.units, k.units_prev), 'cross-sell items sold', 'Quantity of cross-sell lines in orders.') +
-    card('Click rate', pct(k.clicks, k.views), delta(k.views ? k.clicks / k.views : 0, k.views_prev ? k.clicks_prev / k.views_prev : 0), `${num(k.clicks)} clicks / ${num(k.views)} seen`, 'Tiles opened ÷ tiles that scrolled into view (each tile counted once per page view).') +
-    card('Add-to-cart rate', pct(k.adds, k.views), delta(k.views ? k.adds / k.views : 0, k.views_prev ? k.adds_prev / k.views_prev : 0), `${num(k.adds)} added`, 'Add to cart presses on our tiles ÷ tiles seen.') +
+    card('Click rate', pct(k.clicks, k.views), delta(k.views ? k.clicks / k.views : 0, k.views_prev ? k.clicks_prev / k.views_prev : null), `${num(k.clicks)} clicks / ${num(k.views)} seen`, 'Tiles opened ÷ tiles that scrolled into view (each tile counted once per page view).') +
+    card('Add-to-cart rate', pct(k.adds, k.views), delta(k.views ? k.adds / k.views : 0, k.views_prev ? k.adds_prev / k.views_prev : null), `${num(k.adds)} added`, 'Add to cart presses on our tiles ÷ tiles seen.') +
     card('Revenue per 1,000 seen', egp(rpm), delta(rpm, rpmP), `${num(k.views)} tiles seen`, 'Cross-sell revenue ÷ tiles seen × 1,000. Compares placements fairly.') +
     '</div>';
   h += `<div class="card"><div class="hd"><h2>Cross-sell revenue per day</h2><span>${esc(d.from)} – ${esc(d.to)} · daily</span></div>${none ? '<div class="empty">No cross-sell sales yet.</div>' : '<div class="chart"><canvas id="c1"></canvas></div>'}</div>`;
