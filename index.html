@@ -130,7 +130,7 @@ const META_Q = '{ currentAppInstallation { id ab: metafield(namespace: "okb", ke
 async function sessionsFor(A) {
   return Promise.all([
     SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout GROUP BY rollout_treatment_id SINCE ${A.start} UNTIL ${A.until}`),
-    SQ(`FROM sessions SHOW conversion_rate GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
+    SQ(`FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout WHERE session_country = 'Egypt' GROUP BY rollout_treatment_id TIMESERIES day SINCE ${A.start} UNTIL ${A.until}`)]);
 }
 function paint(d) {
   const y = window.scrollY; last = d;
@@ -459,18 +459,23 @@ function pgAB(d, app) {
   const crow = cats.map((cn) => [cn, arms.map(([x], i) => (x.mix?.[cn] || 0) / tots[i])]).sort((a, b) => b[1][0] - a[1][0]);
   h += '<div class="g2">' + card('What baskets are made of', `<s-table><s-table-header-row><s-table-header>Category</s-table-header>${arms.map(([, L]) => `<s-table-header format="numeric">${L}</s-table-header>`).join('')}${running ? '<s-table-header format="numeric">B vs A</s-table-header>' : ''}</s-table-header-row><s-table-body>` +
     crow.map(([cn, v]) => { const rel = running && v[0] ? (v[1] - v[0]) / v[0] * 100 : null; return `<s-table-row><s-table-cell>${esc(cn)}</s-table-cell>${v.map((p) => `<s-table-cell>${(100 * p).toFixed(1)}%</s-table-cell>`).join('')}${running ? `<s-table-cell>${rel == null ? '–' : chg(rel, 0)}</s-table-cell>` : ''}</s-table-row>`; }).join('') + '</s-table-body></s-table>', '<s-text tone="subdued">share of each group’s revenue</s-text>')
-    + card('Conversion rate by day', '<div class="chart"><canvas id="c2"></canvas></div>') + '</div>';
+    + card('By day · Egypt visitors only', `<select class="sel" onchange="DM=this.value;drawDly()">${Object.entries(DMS).map(([k, v]) => `<option value="${k}"${k === DM ? ' selected' : ''}>${v[0]}</option>`).join('')}</select><div class="chart"><canvas id="c2"></canvas></div>`) + '</div>';
   if (running) { const { X } = xsAgg(S, A.start);
     h += card('What the cross sells did in B', `<div class="g4 flat">${tile('Cross-sell revenue', egp(X.rev), `${pct(X.rev, T.rev)} of B’s revenue`)}${tile('Orders with a cross sell', num(X.orders), `of ${num(T.orders)} B orders`)}${tile('Tiles seen', num(X.views), `${pct(X.clicks, X.views)} clicked`)}${tile('Added from tiles', num(X.adds), `${num(X.units)} sold`)}</div>`, `<s-button variant="tertiary" onclick="go('placements')">Details →</s-button>`); }
   h += how(`Shopify runs the test (a theme rollout: live theme vs the cross-sell copy) and counts visitors (sessions), add to carts, checkouts and conversions per group. Orders, value, items and categories come from Shopify sales per order: only orders placed since the test started, valued at checkout incl. delivery; later returns are left out. Improvement = B vs A on the chosen metric. Confidence = how likely B is really better than A on that metric, from each group’s own spread (the same reading Intelligems shows as probability to beat control). A result is trusted at 95% (or 5%, meaning A is better) and after at least 2 full weeks, so weekdays and weekends are both in. Time left = how long until a gap of the size seen so far would reach 95%, 80% of the time, at today’s order pace; if the gap is tiny that is longer than the test. Gross profit is not shown: Export, and it is worked out from Odoo.`);
   app.innerHTML = `<div class="wrap">${h}</div>`;
   keys.forEach((kk, i) => { const vs = arms.map(([x]) => val(kk, x)), G = GOALS[kk]; const fmt = G.p ? (v) => (100 * v).toFixed(2) + '%' : kk === 'upt' ? (v) => (+v).toFixed(2) : (v) => 'EGP ' + (+v).toFixed(kk === 'rps' ? 2 : 0);
     barChart('m' + i, arms.map(([, L, name]) => `${L} ${name}`), vs.map((v) => v ? v.v : 0), fmt); });
-  const days_ = [...new Set((S.dly || []).map((r) => r.day))].sort();
-  const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r ? +(100 * r.conversion_rate).toFixed(2) : null; });
-  charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: days_.map(dshort), datasets: arms.map(([x, L, name], i) => ({ label: `${L} ${name}`, data: series(x.id), borderColor: i ? PINK : PURPLE, backgroundColor: i ? PINK : PURPLE, tension: .3, spanGaps: true, pointRadius: 3 })) },
-    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (cc) => `${cc.dataset.label}: ${cc.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (+v).toFixed(2) + '%', maxTicksLimit: 5 } } } } }));
+  window.drawDly = () => { const old = charts.findIndex((c) => c.canvas && c.canvas.id === 'c2'); if (old > -1) { charts[old].destroy(); charts.splice(old, 1); }
+    const days_ = [...new Set((S.dly || []).map((r) => r.day))].sort(), [, num_, den_] = DMS[DM];
+    const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r && +r[den_] ? +(100 * r[num_] / r[den_]).toFixed(2) : null; });
+    charts.push(new Chart(document.getElementById('c2'), { type: 'line', data: { labels: days_.map(dshort), datasets: arms.map(([x, L, name], i) => ({ label: `${L} ${name}`, data: series(x.id), borderColor: i ? PINK : PURPLE, backgroundColor: i ? PINK : PURPLE, tension: .3, spanGaps: true, pointRadius: 3 })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (cc) => `${cc.dataset.label}: ${cc.parsed.y}%` } } }, scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => (+v).toFixed(2) + '%', maxTicksLimit: 5 } } } } })); };
+  drawDly();
 }
+// ponytail: daily chart is Egypt-only because a desktop bot flood (US/BR/CO etc., 0 add to carts) started 22 Nov and halves every rate
+let DM = 'atc';
+const DMS = { atc: ['Add to cart %', 'sessions_with_cart_additions', 'sessions'], chk: ['Reached checkout %', 'sessions_that_reached_checkout', 'sessions'], cvr: ['Conversion rate %', 'sessions_that_completed_checkout', 'sessions'], c2o: ['Cart → order %', 'sessions_that_completed_checkout', 'sessions_with_cart_additions'] };
 
 /* ---------- Shops vs online (Odoo) ---------- */
 function pgOdoo(d, app) {
