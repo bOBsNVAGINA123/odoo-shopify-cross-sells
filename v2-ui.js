@@ -244,9 +244,9 @@ function pgAB(d, app) {
   keys.forEach((kk, i) => { const vs = arms.map(([x]) => val(kk, x)), G = GOALS[kk]; const fmt = G.p ? (v) => (100 * v).toFixed(2) + '%' : kk === 'upt' ? (v) => (+v).toFixed(2) : (v) => 'EGP ' + (+v).toFixed(kk === 'rps' ? 2 : 0);
     barChart('m' + i, arms.map(([, L, name]) => `${L} ${name}`), vs.map((v) => v ? v.v : 0), fmt); });
   const days_ = [...new Set((S.dly || []).map((r) => r.day))].sort();
-  // writes each day's % on the point: B above the line, A below, so they don't overlap
+  // writes each day's % on the point: the higher of the two arms above, the lower below, so they don't overlap
   const pctLabels = { id: 'pct', afterDatasetsDraw(ch) { const x = ch.ctx; x.save(); x.font = '600 11px system-ui'; x.textAlign = 'center';
-    ch.data.datasets.forEach((ds, di) => { x.fillStyle = ds.borderColor; ch.getDatasetMeta(di).data.forEach((p, k) => { const v = ds.data[k]; if (v != null) x.fillText(v.toFixed(2) + '%', p.x, p.y + (di ? -8 : 16)); }); }); x.restore(); } };
+    ch.data.datasets.forEach((ds, di) => { x.fillStyle = ds.borderColor; ch.getDatasetMeta(di).data.forEach((p, k) => { const v = ds.data[k]; const o = ch.data.datasets[1 - di]?.data[k]; if (v != null) x.fillText(v.toFixed(2) + '%', p.x, p.y + (o == null || v >= o ? -8 : 16)); }); }); x.restore(); } };
   Object.entries(DMS).forEach(([k, [, num_, den_]]) => {
     const series = (id) => days_.map((dd) => { const r = S.dly.find((x) => x.day === dd && String(x.rollout_treatment_id) === id); return r && +r[den_] ? +(100 * r[num_] / r[den_]) : null; });
     charts.push(new Chart(document.getElementById('d_' + k), { type: 'line', plugins: [pctLabels], data: { labels: days_.map(dshort), datasets: arms.map(([x, L, name], i) => ({ label: `${L} ${name}`, data: series(x.id), borderColor: i ? PINK : PURPLE, backgroundColor: i ? PINK : PURPLE, tension: .3, spanGaps: true, pointRadius: 3 })) },
